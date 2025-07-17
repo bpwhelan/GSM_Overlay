@@ -47,7 +47,8 @@ app.whenReady().then(async () => {
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: true,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      webSecurity: false
     },
     show: false,
   });
@@ -83,10 +84,12 @@ win.on('focus', () => {
 })
 
   win.loadFile('index.html');
-  win.webContents.on('context-menu', () => {
-    win.webContents.openDevTools({ mode: 'detach' });
+  if (isDev) {
+    win.webContents.on('context-menu', () => {
+      win.webContents.openDevTools({ mode: 'detach' });
 
-  });
+    });
+  }
   win.once('ready-to-show', () => {
     win.show();
     win.webContents.send("load-settings", userSettings);
@@ -104,7 +107,7 @@ win.on('focus', () => {
         nodeIntegration: false
       }
     });
-    
+
     yomitanOptionsWin.removeMenu()
     yomitanOptionsWin.loadURL(`chrome-extension://${ext.id}/settings.html`);
   });
