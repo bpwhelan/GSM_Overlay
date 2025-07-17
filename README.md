@@ -15,3 +15,4 @@ This is a transparent overlay that listens for websocket output and display it o
 - Ability to read from the clipboard (if there is demand for it)
 - More optimizations
 - UI/UX imporvements
+- Custom Font Support
