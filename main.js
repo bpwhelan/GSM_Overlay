@@ -104,7 +104,8 @@ win.on('focus', () => {
         nodeIntegration: false
       }
     });
-
+    
+    yomitanOptionsWin.removeMenu()
     yomitanOptionsWin.loadURL(`chrome-extension://${ext.id}/settings.html`);
   });
 

@@ -104,12 +104,11 @@ background: rgba(202, 12, 12, 0.692);
 <body style="margin:0px;">
   <div id="main-box">
     <div draggable="false" id="draggable" , class="interactive">
-      <button class="control-btn" id="btn-resize">↔</button>
       <button class="control-btn" id="btn-settings">⚙</button>
-      <button class="control-btn" id="btn-yomitan">📚</button>
+      <button class="control-btn" id="btn-yomitan"><img src="yomitan-icon.svg"></button>
       <button class="control-btn" id="btn-close">✖</button>
     </div>
-    <div id="text" class="interactive">彼女は学校に行きました。</div>
+    <div id="text" class="interactive">Waiting for Webhook</div>
     <div draggable="false" id="resize-handle" class="interactive half-interactive"></div>
   </div>
 
@@ -199,10 +198,6 @@ function stopResize() {
     }
     let resizeMode = false
     const { ipcRenderer } = require("electron");
-    document.getElementById("btn-resize").addEventListener("click", () => {
-      resizeMode = !resizeMode
-      ipcRenderer.send("resize-mode", resizeMode);
-    });
     document.getElementById("btn-close").addEventListener("click", () => {
       ipcRenderer.send("app-close");
     });
