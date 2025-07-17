@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en" data-page-type="search">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Yomitan Search</title>
+    <link rel="icon" type="image/png" href="/images/icon16.png" sizes="16x16">
+    <link rel="icon" type="image/png" href="/images/icon19.png" sizes="19x19">
+    <link rel="icon" type="image/png" href="/images/icon32.png" sizes="32x32">
+    <link rel="icon" type="image/png" href="/images/icon38.png" sizes="38x38">
+    <link rel="icon" type="image/png" href="/images/icon48.png" sizes="48x48">
+    <link rel="icon" type="image/png" href="/images/icon64.png" sizes="64x64">
+    <link rel="icon" type="image/png" href="/images/icon128.png" sizes="128x128">
+    <link rel="stylesheet" type="text/css" href="/css/material.css">
+    <link rel="stylesheet" type="text/css" href="/css/display.css">
+    <link rel="stylesheet" type="text/css" href="/css/display-pronunciation.css">
+    <link rel="stylesheet" type="text/css" href="/css/structured-content.css">
+    <link rel="stylesheet" type="text/css" href="/css/search.css">
+    <script src="/js/display/search-main.js" type="module"></script>
+</head>
+<body hidden>
+
+<div class="content-outer">
+    <div class="content">
+        <div class="content-scroll scrollbar" id="content-scroll">
+            <div id="above-sticky-header">
+                <div class="top-progress-bar-container"><div class="progress-bar-indeterminant" id="progress-indicator" hidden></div></div>
+                <div class="search-header-wrapper">
+                    <div class="search-header">
+                        <div id="intro">
+                            <h1>Yomitan Search</h1>
+                        </div>
+
+                        <div class="scan-disable">
+                            <div class="search-options">
+                                <div class="search-option" id="search-option-profile-select">
+                                    <span class="profile-select-container"><select class="profile-select" id="profile-select">
+                                        <optgroup label="Primary Profile" id="profile-select-option-group"></optgroup>
+                                    </select></span>
+                                </div>
+                                <label class="search-option" id="search-option-clipboard-monitor-container">
+                                    <label class="toggle"><input type="checkbox" id="clipboard-monitor-enable"><span class="toggle-body"><span class="toggle-track"></span><span class="toggle-knob"></span></span></label>
+                                    <span class="search-option-label">Clipboard monitor</span>
+                                </label>
+                                <label class="search-option" id="search-option-wanakana">
+                                    <label class="toggle"><input type="checkbox" id="wanakana-enable"><span class="toggle-body"><span class="toggle-track"></span><span class="toggle-knob"></span></span></label>
+                                    <span class="search-option-label">Automatic kana conversion</span>
+                                </label>
+                                <div class="search-option" id="query-parser-mode-container" hidden>
+                                    <span class="search-option-pre-label">Parser:</span>
+                                    <select id="query-parser-mode-select"></select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="search-header-wrapper sticky-header">
+                <div class="search-header">
+                    <div class="search-textbox-container">
+                        <textarea id="search-textbox" class="scrollbar" placeholder="Input a term, expression, sentence, or block of text" autocomplete="off" lang="ja" autofocus></textarea>
+                        <button type="button" id="search-back-button" class="search-button" hidden><span class="icon" data-icon="left-chevron"></span></button>
+                        <button type="button" id="search-button" class="search-button"><span class="icon" data-icon="magnifying-glass"></span></button>
+                    </div>
+                    <div class="scan-disable scrollbar" id="query-parser-container" hidden>
+                        <div id="query-parser-content" lang="ja"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="content-body" id="content-body">
+                <div class="content-body-inner">
+
+                    <span tabindex="-1" id="content-scroll-focus"></span>
+
+                    <div id="dictionary-entries"></div>
+
+                    <div id="no-results" hidden>
+                        <div class="entry">
+                            <p>No results found.</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        <div class="content-footer-container1"><div class="content-footer-container2"><div class="content-footer" id="content-footer"></div><div class="scrollbar-spacer scrollbar"></div></div></div>
+    </div>
+</div>
+
+<div id="popup-menus"></div>
+
+</body>
+</html>

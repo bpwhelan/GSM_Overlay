@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 16px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h3>Overlay Settings</h3>
+  <label>Font Size:
+    <input type="number" id="fontSize" value="42" />
+  </label>
+  <label>WebSocket URL:
+    <input type="text" id="wsUrl" value="ws://localhost:6677/api/ws/text/origin" />
+  </label>
+
+  <script>
+    const { ipcRenderer } = require("electron");
+    document.getElementById("fontSize").addEventListener("input", (event) => {
+      const newSize = event.target.value;
+      ipcRenderer.send("fontsize-changed", newSize)
+    })
+    document.getElementById("wsUrl").addEventListener("change", (event) => {
+      ipcRenderer.send("weburl-changed", event.target.value)
+    })
+    ipcRenderer.on("preload-settings", (event, {fontSize, weburl}) => {
+      document.getElementById("fontSize").value = fontSize;
+      document.getElementById("wsUrl").value = weburl;
+    })
+  </script>
+</body>
+</html>
