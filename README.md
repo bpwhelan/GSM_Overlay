@@ -10,6 +10,13 @@ This is a transparent overlay that listens for websocket output and display it o
 - Click the gear icon and set your websocket URL
 - Enjoy
 
+# Demo
+
+
+https://github.com/user-attachments/assets/efc3e127-93f2-41af-b237-be26df3141d6
+
+
+
 # Future Goals
 - More polish (Proper app name and icon etc.)
 - Ability to read from the clipboard (if there is demand for it)
