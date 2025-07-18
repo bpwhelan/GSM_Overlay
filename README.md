@@ -23,3 +23,7 @@ https://github.com/user-attachments/assets/efc3e127-93f2-41af-b237-be26df3141d6
 - More optimizations
 - UI/UX imporvements
 - Custom Font Support
+
+# Acknowledgement
+- [Yomitan](https://github.com/yomidevs/yomitan)
+- [Yomininja](https://github.com/matt-m-o/YomiNinja) (rip)
