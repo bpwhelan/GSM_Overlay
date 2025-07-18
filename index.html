@@ -89,6 +89,10 @@ background: rgba(202, 12, 12, 0.692);
   .control-btn:hover {
     color: #ff6666;
   }
+
+  #btn-pin {
+    color: #ddd2d2a3;
+  }
 </style>
 
 <html>
@@ -104,6 +108,7 @@ background: rgba(202, 12, 12, 0.692);
 <body style="margin:0px;">
   <div id="main-box">
     <div draggable="false" id="draggable" , class="interactive">
+      <button class="control-btn" id="btn-pin">⬤</button>
       <button class="control-btn" id="btn-settings">⚙</button>
       <button class="control-btn" id="btn-yomitan"><img src="yomitan-icon.svg"></button>
       <button class="control-btn" id="btn-close">✖</button>
@@ -196,8 +201,20 @@ function stopResize() {
       }
       window.ws = websocket;
     }
-    let resizeMode = false
+    let resizeMode = false;
+    let pinned = false;
     const { ipcRenderer } = require("electron");
+    document.getElementById("btn-pin").addEventListener("click", () => {
+      if (!pinned) {
+        document.body.classList.add("force-visible");
+        pinned = true;
+        document.getElementById("btn-pin").style.color = "#ddd2d2";
+      } else {
+        document.getElementById("btn-pin").style.color = "#ddd2d2a3";
+        document.body.classList.remove("force-visible");
+        pinned = false;
+      }
+    });
     document.getElementById("btn-close").addEventListener("click", () => {
       ipcRenderer.send("app-close");
     });
@@ -222,10 +239,12 @@ function stopResize() {
     })
 
     ipcRenderer.on("force-visible", (event, value) => {
-      if (value) {
-        document.body.classList.add("force-visible");
-      } else {
-        document.body.classList.remove("force-visible");
+      if (!pinned) {
+        if (value) {
+          document.body.classList.add("force-visible");
+        } else {
+          document.body.classList.remove("force-visible");
+        }
       }
     });
     ipcRenderer.on("request-current-settings", () => {
