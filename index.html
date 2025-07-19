@@ -197,7 +197,13 @@ function stopResize() {
       }
       const websocket = new WebSocket(weburl);
       websocket.onmessage = (event) => {
-        document.getElementById("text").textContent = event.data[0]=='\n' ? event.data.slice(1) : event.data;
+        let line = event.data;
+        try {
+          line = JSON.parse(event.data)?.sentence || event.data;
+        } catch (_) {
+          line = event.data
+        }
+        document.getElementById("text").textContent = line[0] == '\n' ? line.slice(1) : line;
       }
       window.ws = websocket;
     }
