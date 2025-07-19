@@ -1,9 +1,8 @@
 // https://stackoverflow.com/questions/74464771/how-to-implement-click-through-window-except-on-element-in-electron
 let isMouseOverInteractiveElement = false;
 
-window.addEventListener('DOMContentLoaded', () => {
-const interactiveElements = 
-document.querySelectorAll('.interactive');
+function setMouseEventHandlers() {
+    const interactiveElements = document.querySelectorAll('.interactive');
 
 interactiveElements.forEach((element) => {
     element.addEventListener('mouseenter', () => {
@@ -18,4 +17,12 @@ interactiveElements.forEach((element) => {
     }
 
 });
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    setMouseEventHandlers();
 });
+
+// setInterval(() => {
+//     setMouseEventHandlers();
+// }, 250);

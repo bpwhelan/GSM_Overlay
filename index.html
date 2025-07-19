@@ -29,7 +29,7 @@ background: rgba(202, 12, 12, 0.692);
 
   .text-box {
     position: absolute;
-    white-space: pre-wrap;
+    white-space: nowrap;
     background: rgba(15, 15, 15, 0);
     color: rgba(255, 255, 255, 0);
     min-height: 25px;
@@ -37,6 +37,11 @@ background: rgba(202, 12, 12, 0.692);
     pointer-events: auto;
     user-select: text;
     z-index: 1000;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    overflow: hidden;
   }
 
   body.force-visible .text-box,
@@ -52,23 +57,23 @@ background: rgba(202, 12, 12, 0.692);
     transition: opacity 0.3s ease;
   }
 
-#resize-handle {
-  opacity: 0;
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  right: 0;
-  bottom: 0;
-  transform: rotate(180deg);
- background:
-    linear-gradient(135deg, transparent 45%, #aaa 45%, #aaa 55%, transparent 55%),
-    linear-gradient(135deg, transparent 25%, #aaa 25%, #aaa 35%, transparent 35%),
-    linear-gradient(135deg, transparent 5%, #aaa 5%, #aaa 15%, transparent 15%);
-  background-repeat: no-repeat;
-  background-position: bottom right;
-  cursor: se-resize;
-  pointer-events: auto;
-}
+  #resize-handle {
+    opacity: 0;
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    right: 0;
+    bottom: 0;
+    transform: rotate(180deg);
+    background:
+      linear-gradient(135deg, transparent 45%, #aaa 45%, #aaa 55%, transparent 55%),
+      linear-gradient(135deg, transparent 25%, #aaa 25%, #aaa 35%, transparent 35%),
+      linear-gradient(135deg, transparent 5%, #aaa 5%, #aaa 15%, transparent 15%);
+    background-repeat: no-repeat;
+    background-position: bottom right;
+    cursor: se-resize;
+    pointer-events: auto;
+  }
 
   #draggable {
     height: 30px;
@@ -83,7 +88,7 @@ background: rgba(202, 12, 12, 0.692);
     position: fixed;
     left: 50%;
     top: 70%;
-    
+
   }
 
   .faded {
@@ -96,9 +101,10 @@ background: rgba(202, 12, 12, 0.692);
     color: white;
     transition: opacity 0.3s ease;
   }
+
   #main-box:hover #resize-handle {
-  opacity: 1;
-}
+    opacity: 1;
+  }
 
   .control-btn {
     background: transparent;
@@ -142,130 +148,154 @@ background: rgba(202, 12, 12, 0.692);
     <div draggable="false" id="resize-handle" class="interactive half-interactive"></div>
   </div>
 
-<script>
-window.addEventListener('yomitan-popup-shown', () => {
-  ipcRenderer.send('yomitan-event', true);
-});
-window.addEventListener('yomitan-popup-hidden', () => {
-  ipcRenderer.send('yomitan-event', false);
-});
-</script>
+  <script>
+    window.addEventListener('yomitan-popup-shown', () => {
+      ipcRenderer.send('yomitan-event', true);
+    });
+    window.addEventListener('yomitan-popup-hidden', () => {
+      ipcRenderer.send('yomitan-event', false);
+    });
+  </script>
 
-<script>
-const textElement = document.getElementById("text");
-const handle = document.getElementById("resize-handle");
+  <script>
+    const textElement = document.getElementById("text");
+    const handle = document.getElementById("resize-handle");
 
-let isResizing = false;
-let startX, startY, startWidth, startHeight;
+    let isResizing = false;
+    let startX, startY, startWidth, startHeight;
 
-handle.addEventListener("mousedown", (e) => {
-  isResizing = true;
-  startX = e.clientX;
-  startY = e.clientY;
-  const rect = textElement.getBoundingClientRect();
-  startWidth = rect.width;
-  startHeight = rect.height;
-  document.addEventListener("mousemove", resize);
-  document.addEventListener("mouseup", stopResize, { once: true });
-});
+    handle.addEventListener("mousedown", (e) => {
+      isResizing = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      const rect = textElement.getBoundingClientRect();
+      startWidth = rect.width;
+      startHeight = rect.height;
+      document.addEventListener("mousemove", resize);
+      document.addEventListener("mouseup", stopResize, { once: true });
+    });
 
-function resize(e) {
-  if (!isResizing) return;
-  const newWidth = startWidth + (e.clientX - startX);
-  const newHeight = startHeight + (e.clientY - startY);
-  textElement.style.width = newWidth + "px";
-  textElement.style.height = newHeight + "px";
-}
+    function resize(e) {
+      if (!isResizing) return;
+      const newWidth = startWidth + (e.clientX - startX);
+      const newHeight = startHeight + (e.clientY - startY);
+      textElement.style.width = newWidth + "px";
+      textElement.style.height = newHeight + "px";
+    }
 
-function stopResize() {
-  isResizing = false;
-  document.removeEventListener("mousemove", resize);
-}
+    function stopResize() {
+      isResizing = false;
+      document.removeEventListener("mousemove", resize);
+    }
 
 
-</script>
+  </script>
 
-<script>
-  const { ipcRenderer } = require("electron");
-  const dragBar = document.getElementById("draggable");
-  const textEl = document.getElementById("text");
-  const mainBox = document.getElementById("main-box");
+  <script>
+    const { ipcRenderer } = require("electron");
+    const dragBar = document.getElementById("draggable");
+    const textEl = document.getElementById("text");
+    const mainBox = document.getElementById("main-box");
 
-  let isDragging = false;
-  let offsetX, offsetY;
+    let isDragging = false;
+    let offsetX, offsetY;
 
-  dragBar.addEventListener("mousedown", (e) => {
-    const rect = mainBox.getBoundingClientRect();
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
-    isDragging = true;
-    document.addEventListener("mousemove", onDrag);
-    document.addEventListener("mouseup", stopDrag, { once: true });
-  });
-  
-  function onDrag(e) {
-    if (!isDragging) return;
-    const newX = Math.max(0, Math.min(window.innerWidth - mainBox.offsetWidth, e.clientX - offsetX));
-    const newY = Math.max(0, Math.min(window.innerHeight - mainBox.offsetHeight, e.clientY - offsetY));
-    mainBox.style.left = `${newX}px`;
-    mainBox.style.top = `${newY}px`;
-  }
-  
-  function stopDrag() {
-    isDragging = false;
-    document.removeEventListener("mousemove", onDrag);
-  }
+    dragBar.addEventListener("mousedown", (e) => {
+      const rect = mainBox.getBoundingClientRect();
+      offsetX = e.clientX - rect.left;
+      offsetY = e.clientY - rect.top;
+      isDragging = true;
+      document.addEventListener("mousemove", onDrag);
+      document.addEventListener("mouseup", stopDrag, { once: true });
+    });
+
+    function onDrag(e) {
+      if (!isDragging) return;
+      const newX = Math.max(0, Math.min(window.innerWidth - mainBox.offsetWidth, e.clientX - offsetX));
+      const newY = Math.max(0, Math.min(window.innerHeight - mainBox.offsetHeight, e.clientY - offsetY));
+      mainBox.style.left = `${newX}px`;
+      mainBox.style.top = `${newY}px`;
+    }
+
+    function stopDrag() {
+      isDragging = false;
+      document.removeEventListener("mousemove", onDrag);
+    }
 
 
     function setupWebSocket(weburl, isPrimary) {
-      let type ="ws1";
-      if (!isPrimary) {
-        type = "ws2";
-      }
-      if (window[type] && window[type].readyState !== WebSocket.CLOSED) {
-        window[type].close();
-      }
-      const websocket = new WebSocket(weburl);
-      websocket.onclose = (event) => {
-        ipcRenderer.send(`websocket-closed`, type)
-      }
-      websocket.onopen = (event) => {
-        ipcRenderer.send(`websocket-opened`, type)
-      }
-      websocket.onmessage = (event) => {
-        let data = event.data;
-        try {
-          data = JSON.parse(event.data);
-        } catch (_) {
-          data = event.data;
+      try {
+        new URL(weburl);
+        let type = "ws1";
+        if (!isPrimary) {
+          type = "ws2";
         }
+        if (window[type] && window[type].readyState !== WebSocket.CLOSED) {
+          window[type].close();
+        }
+        const websocket = new WebSocket(weburl);
+        websocket.onclose = (event) => {
+          ipcRenderer.send(`websocket-closed`, type)
+        }
+        websocket.onopen = (event) => {
+          ipcRenderer.send(`websocket-opened`, type)
+        }
+        websocket.onmessage = (event) => {
+          let data = event.data;
+          try {
+            data = JSON.parse(event.data);
+          } catch (_) {
+            data = event.data;
+          }
 
-        // Clear existing text boxes
-        clearTextBoxes();
-        
-        console.log(data);
-        // Check if data is an array (new coordinate-based format)
-        if (Array.isArray(data)) {
-          // Combine all sentences for the main box
-          const combinedSentence = data.map(item => item.sentence).join(' ');
-          document.getElementById("text").textContent = combinedSentence;
-          // Create individual boxes
-          data.forEach(item => {
-            if (item.sentence && typeof item.x1 === 'number' && typeof item.y1 === 'number' && 
+          // Clear existing text boxes
+          clearTextBoxes();
+
+          console.log(data);
+
+          // Check if data has words array (new word-level coordinate format)
+          if (data && data[0]?.words && Array.isArray(data[0]?.words)) {
+            // Handle word-level coordinates (array of sentences with words)
+            // Combine all sentences for the main box
+            const combinedSentence = data.map(item => item.sentence).join(' ');
+            document.getElementById("text").textContent = combinedSentence;
+            // Create individual word boxes with precise positioning and no background
+            data.forEach(item => {
+              if (Array.isArray(item.words)) {
+                item.words.forEach(wordData => {
+                  const estimatedFontSize = estimateFontSize(wordData.word, wordData.x2 - wordData.x1, wordData.y2 - wordData.y1);
+                  createTextBox(wordData.word, wordData.x1, wordData.y1, wordData.x2, wordData.y2, estimatedFontSize, true, true, true);
+                });
+              }
+            });
+          }
+          // Check if data is an array (sentence-based coordinate format)
+          else if (Array.isArray(data)) {
+            // Combine all sentences for the main box
+            const combinedSentence = data.map(item => item.sentence).join(' ');
+            document.getElementById("text").textContent = combinedSentence;
+            // Create individual boxes
+            data.forEach(item => {
+              if (item.sentence && typeof item.x1 === 'number' && typeof item.y1 === 'number' &&
                 typeof item.x2 === 'number' && typeof item.y2 === 'number') {
-              createTextBox(item.sentence, item.x1, item.y1, item.x2, item.y2, item.fontSize || 39);
-            }
-          });
-        } else {
-          // Legacy format - single sentence
-          let line = data?.sentence || data;
-          document.getElementById("text").textContent = line[0] == '\n' ? line.slice(1) : line;
+                createTextBox(item.sentence, item.x1, item.y1, item.x2, item.y2, item.fontSize || 39);
+              }
+            });
+          } else {
+            // Legacy format - single sentence
+            let line = data?.sentence || data;
+            document.getElementById("text").textContent = line[0] == '\n' ? line.slice(1) : line;
+          }
+          ipcRenderer.send("text-recieved", data);
+          setMouseEventHandlers();
         }
-        ipcRenderer.send("text-recieved", data);
+        window[type] = websocket;
+      } catch (e) {
+        console.warn("Websocket setup error:", e);
+        return;
       }
-      window[type] = websocket;
     }
-    
+
     function checkAndReconnectWebSockets() {
       if (window.ws1 && window.ws1.readyState === WebSocket.CLOSED) {
         setupWebSocket(window.ws1.url, true);
@@ -275,23 +305,83 @@ function stopResize() {
       }
     }
     setInterval(checkAndReconnectWebSockets, 1000); // Check every 10 seconds
-    
+
+    // Function to estimate font size based on word dimensions
+    function estimateFontSize(word, width, height) {
+      // Basic estimation: assume average character width is ~0.6 of font size
+      // and height should be close to font size
+      const charCount = word.length;
+      const estimatedByWidth = charCount > 0 ? (width / charCount) / 0.6 : height;
+      const estimatedByHeight = height * 0.8; // Account for line height
+
+      // Use the smaller of the two estimates to ensure text fits
+      const estimated = Math.min(estimatedByWidth, estimatedByHeight);
+
+      // Clamp to reasonable range (8px to 100px)
+      return Math.max(8, Math.min(100, Math.round(estimated)));
+    }
+
     // Function to create individual text boxes at specified coordinates
-    function createTextBox(sentence, x1, y1, x2, y2, fontSize) {
+    function createTextBox(sentence, x1, y1, x2, y2, fontSize, noBackground = false, transparentText = false, verticalText = false) {
+      console.log(`Creating box for "${sentence}" at (${x1}, ${y1}) to (${x2}, ${y2}) with font size ${fontSize}`);
       const textBox = document.createElement('div');
       textBox.className = 'text-box interactive';
       textBox.textContent = sentence[0] == '\n' ? sentence.slice(1) : sentence;
-      
+
       // Set position and dimensions
       textBox.style.left = `${x1}px`;
       textBox.style.top = `${y1}px`;
       textBox.style.width = `${x2 - x1}px`;
       textBox.style.height = `${y2 - y1}px`;
       textBox.style.fontSize = `${fontSize}px`;
-      
+
+      // Remove background if word-level
+      if (noBackground) {
+        textBox.style.background = 'rgba(0,0,0,0)';
+      }
+      // Make text transparent if requested
+      if (transparentText) {
+        textBox.style.color = 'rgba(255,255,255,0)';
+      }
+
+      // Vertical text support also check if japanese characters are present
+      if (verticalText && /[^\u0000-\u007F]+/.test(sentence)) {
+        textBox.style.writingMode = 'vertical-rl';
+        textBox.style.textAlign = 'center';
+        textBox.style.alignItems = 'flex-start';
+        textBox.style.justifyContent = 'center';
+        textBox.style.whiteSpace = 'normal';
+      } else {
+        // Additional styling for better text fitting
+        textBox.style.lineHeight = '1';
+        textBox.style.display = 'flex';
+        textBox.style.alignItems = 'center';
+        textBox.style.justifyContent = 'flex-start';
+        textBox.style.overflow = 'hidden';
+        textBox.style.whiteSpace = 'nowrap';
+      }
+
       document.body.appendChild(textBox);
     }
-    
+
+    function setMouseEventHandlers() {
+      const interactiveElements = document.querySelectorAll('.interactive');
+
+      interactiveElements.forEach((element) => {
+        element.addEventListener('mouseenter', () => {
+          isMouseOverInteractiveElement = true;
+          ipcRenderer.send('set-ignore-mouse-events', false);
+        });
+        if (!element.classList.contains("half-interactive")) {
+          element.addEventListener('mouseleave', () => {
+            isMouseOverInteractiveElement = false;
+            ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
+          });
+        }
+
+      });
+    }
+
     // Function to clear all existing text boxes
     function clearTextBoxes() {
       const existingBoxes = document.querySelectorAll('.text-box');
