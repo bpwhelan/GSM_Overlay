@@ -6,7 +6,7 @@ const path = require('path');
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 let userSettings = {
   "fontSize": 42,
-  "weburl1": "ws://localhost:6677/api/ws/text/origin",
+  "weburl1": "ws://localhost:49999",
   "weburl2": "ws://localhost:6677"
 };
 
@@ -95,6 +95,7 @@ win.on('focus', () => {
   win.once('ready-to-show', () => {
     win.show();
     win.webContents.send("load-settings", userSettings);
+    win.setAlwaysOnTop(true, 'screen-saver');
   });
 
   ipcMain.on("app-close", () => {
@@ -182,6 +183,10 @@ win.on('focus', () => {
     win.webContents.send("new-weburl2", newurl)
   })
   
+  ipcMain.on("text-recieved", (event, text) => {
+    win.setAlwaysOnTop(true, 'screen-saver');
+    // win.webContents.send("new-text", text);
+  });
 
   app.on("before-quit", () => {
     fs.writeFileSync(settingsPath, JSON.stringify(userSettings, null, 2))

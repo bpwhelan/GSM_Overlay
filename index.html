@@ -27,6 +27,31 @@ background: rgba(202, 12, 12, 0.692);
     overflow: auto;
   }
 
+  .text-box {
+    position: absolute;
+    white-space: pre-wrap;
+    background: rgba(15, 15, 15, 0);
+    color: rgba(255, 255, 255, 0);
+    min-height: 25px;
+    text-align: start;
+    pointer-events: auto;
+    user-select: text;
+    z-index: 1000;
+  }
+
+  body.force-visible .text-box,
+  body:hover .text-box {
+    background: rgba(15, 15, 15, 0.856);
+    color: white;
+    transition: opacity 0.3s ease;
+  }
+
+  .text-box:hover {
+    background: rgba(15, 15, 15, 0.856);
+    color: white;
+    transition: opacity 0.3s ease;
+  }
+
 #resize-handle {
   opacity: 0;
   position: absolute;
@@ -208,15 +233,69 @@ function stopResize() {
         ipcRenderer.send(`websocket-opened`, type)
       }
       websocket.onmessage = (event) => {
-        let line = event.data;
+        let data = event.data;
         try {
-          line = JSON.parse(event.data)?.sentence || event.data;
+          data = JSON.parse(event.data);
         } catch (_) {
-          line = event.data
+          data = event.data;
         }
-        document.getElementById("text").textContent = line[0] == '\n' ? line.slice(1) : line;
+
+        // Clear existing text boxes
+        clearTextBoxes();
+        
+        console.log(data);
+        // Check if data is an array (new coordinate-based format)
+        if (Array.isArray(data)) {
+          // Combine all sentences for the main box
+          const combinedSentence = data.map(item => item.sentence).join(' ');
+          document.getElementById("text").textContent = combinedSentence;
+          // Create individual boxes
+          data.forEach(item => {
+            if (item.sentence && typeof item.x1 === 'number' && typeof item.y1 === 'number' && 
+                typeof item.x2 === 'number' && typeof item.y2 === 'number') {
+              createTextBox(item.sentence, item.x1, item.y1, item.x2, item.y2, item.fontSize || 39);
+            }
+          });
+        } else {
+          // Legacy format - single sentence
+          let line = data?.sentence || data;
+          document.getElementById("text").textContent = line[0] == '\n' ? line.slice(1) : line;
+        }
+        ipcRenderer.send("text-recieved", data);
       }
       window[type] = websocket;
+    }
+    
+    function checkAndReconnectWebSockets() {
+      if (window.ws1 && window.ws1.readyState === WebSocket.CLOSED) {
+        setupWebSocket(window.ws1.url, true);
+      }
+      if (window.ws2 && window.ws2.readyState === WebSocket.CLOSED) {
+        setupWebSocket(window.ws2.url, false);
+      }
+    }
+    setInterval(checkAndReconnectWebSockets, 1000); // Check every 10 seconds
+    
+    // Function to create individual text boxes at specified coordinates
+    function createTextBox(sentence, x1, y1, x2, y2, fontSize) {
+      const textBox = document.createElement('div');
+      textBox.className = 'text-box interactive';
+      textBox.textContent = sentence[0] == '\n' ? sentence.slice(1) : sentence;
+      
+      // Set position and dimensions
+      textBox.style.left = `${x1}px`;
+      textBox.style.top = `${y1}px`;
+      textBox.style.width = `${x2 - x1}px`;
+      textBox.style.height = `${y2 - y1}px`;
+      textBox.style.fontSize = `${fontSize}px`;
+      
+      document.body.appendChild(textBox);
+    }
+    
+    // Function to clear all existing text boxes
+    function clearTextBoxes() {
+      const existingBoxes = document.querySelectorAll('.text-box');
+      existingBoxes.forEach(box => box.remove());
     }
 
     let resizeMode = false;
@@ -275,6 +354,8 @@ function stopResize() {
       const weburl2 = window.ws2.url;
       ipcRenderer.send("reply-current-settings", { fontSize, weburl1, weburl2 });
     })
+
+
 
   </script>
 
