@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2021-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -56,7 +56,7 @@ export class TemplateRendererMediaProvider {
         const data = this._getMediaData(media, args, namedArgs);
         if (data !== null) {
             const result = this._getFormattedValue(data, namedArgs);
-            if (typeof result === 'string') { return result; }
+            if (typeof result === 'string') { return result.replaceAll('\n', '<br>\n'); }
         }
         const defaultValue = namedArgs.default;
         return defaultValue === null || typeof defaultValue === 'string' ? defaultValue : '';
@@ -101,8 +101,9 @@ export class TemplateRendererMediaProvider {
             case 'screenshot': return this._getSimpleMediaData(media, 'screenshot');
             case 'clipboardImage': return this._getSimpleMediaData(media, 'clipboardImage');
             case 'clipboardText': return this._getSimpleMediaData(media, 'clipboardText');
-            case 'selectionText': return this._getSimpleMediaData(media, 'selectionText');
-            case 'textFurigana': return this._getTextFurigana(media, args[1], namedArgs);
+            case 'popupSelectionText': return this._getSimpleMediaData(media, 'popupSelectionText');
+            case 'textFurigana': return this._getTextFurigana(media, args[1], namedArgs, 'furiganaHtml');
+            case 'textFuriganaPlain': return this._getTextFurigana(media, args[1], namedArgs, 'furiganaPlain');
             case 'dictionaryMedia': return this._getDictionaryMedia(media, args[1], namedArgs);
             default: return null;
         }
@@ -155,16 +156,22 @@ export class TemplateRendererMediaProvider {
      * @param {import('anki-templates').Media} media
      * @param {unknown} text
      * @param {import('core').SerializableObject} namedArgs
+     * @param {import('anki-note-builder').TextFuriganaFormats} furiganaFormat
      * @returns {?import('anki-templates').MediaObject}
      */
-    _getTextFurigana(media, text, namedArgs) {
+    _getTextFurigana(media, text, namedArgs, furiganaFormat) {
         if (typeof text !== 'string') { return null; }
         const readingMode = this._normalizeReadingMode(namedArgs.readingMode);
         const {textFurigana} = media;
         if (Array.isArray(textFurigana)) {
             for (const entry of textFurigana) {
                 if (entry.text !== text || entry.readingMode !== readingMode) { continue; }
-                return entry.details;
+                switch (furiganaFormat) {
+                    case 'furiganaHtml':
+                        return entry.detailsHtml;
+                    case 'furiganaPlain':
+                        return entry.detailsPlain;
+                }
             }
         }
         this._addRequirement({

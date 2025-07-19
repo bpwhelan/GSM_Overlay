@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2021-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -138,7 +138,7 @@ export function getRequiredPermissionsForAnkiFieldValue(fieldValue) {
 export function hasRequiredPermissionsForOptions(permissions, options) {
     const permissionsSet = new Set(permissions.permissions);
 
-    if (!permissionsSet.has('nativeMessaging') && options.parsing.enableMecabParser) {
+    if (!permissionsSet.has('nativeMessaging') && (options.parsing.enableMecabParser || options.general.enableYomitanApi)) {
         return false;
     }
 
@@ -146,12 +146,10 @@ export function hasRequiredPermissionsForOptions(permissions, options) {
         if (options.clipboard.enableBackgroundMonitor || options.clipboard.enableSearchPageMonitor) {
             return false;
         }
-        const fieldsList = [
-            options.anki.terms.fields,
-            options.anki.kanji.fields,
-        ];
+        const fieldsList = options.anki.cardFormats.map((cardFormat) => cardFormat.fields);
+
         for (const fields of fieldsList) {
-            for (const fieldValue of Object.values(fields)) {
+            for (const {value: fieldValue} of Object.values(fields)) {
                 const markers = getFieldMarkers(fieldValue);
                 for (const marker of markers) {
                     if (ankiFieldMarkerMayUseClipboard(marker)) {

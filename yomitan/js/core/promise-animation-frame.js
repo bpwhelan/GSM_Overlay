@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2019-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,6 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
+import {safePerformance} from './safe-performance.js';
 
 /**
  * Creates a promise that will resolve after the next animation frame, using `requestAnimationFrame`.
@@ -51,7 +53,7 @@ export function promiseAnimationFrame(timeout) {
                 cancelAnimationFrame(frameRequest);
                 frameRequest = null;
             }
-            resolve({time: performance.now(), timeout: true});
+            resolve({time: safePerformance.now(), timeout: true});
         };
 
         frameRequest = requestAnimationFrame(onFrame);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024  Yomitan Authors
+ * Copyright (C) 2024-2025  Yomitan Authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,13 +17,15 @@
 
 import {prefixInflection, suffixInflection} from '../language-transforms.js';
 
+/** @typedef {keyof typeof conditions} Condition */
+
 /**
  * @param {boolean} notBeginning
  * @param {string} originalOrthography
  * @param {string} alternateOrthography
- * @param {string[]} conditionsIn
- * @param {string[]} conditionsOut
- * @returns {import('language-transformer').Rule}
+ * @param {Condition[]} conditionsIn
+ * @param {Condition[]} conditionsOut
+ * @returns {import('language-transformer').Rule<Condition>}
  */
 function tryAlternateOrthography(notBeginning, originalOrthography, alternateOrthography, conditionsIn, conditionsOut) {
     const orthographyRegExp = notBeginning ? new RegExp('(?<!^)' + originalOrthography, 'g') : new RegExp(originalOrthography, 'g');
@@ -36,10 +38,12 @@ function tryAlternateOrthography(notBeginning, originalOrthography, alternateOrt
     };
 }
 
-/** @type {import('language-transformer').LanguageTransformDescriptor} */
+const conditions = {};
+
+/** @type {import('language-transformer').LanguageTransformDescriptor<Condition>} */
 export const oldIrishTransforms = {
     language: 'sga',
-    conditions: {},
+    conditions,
     transforms: {
         'nd for nn': {
             name: 'nd for nn',

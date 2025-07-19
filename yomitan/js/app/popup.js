@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2016-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -21,6 +21,7 @@ import {DynamicProperty} from '../core/dynamic-property.js';
 import {EventDispatcher} from '../core/event-dispatcher.js';
 import {EventListenerCollection} from '../core/event-listener-collection.js';
 import {ExtensionError} from '../core/extension-error.js';
+import {safePerformance} from '../core/safe-performance.js';
 import {deepEqual} from '../core/utilities.js';
 import {addFullscreenChangeEventListener, computeZoomScale, convertRectZoomCoordinates, getFullscreenElement} from '../dom/document-util.js';
 import {loadStyle} from '../dom/style-util.js';
@@ -302,6 +303,7 @@ export class Popup extends EventDispatcher {
         await this._show(sourceRects, writingMode);
 
         if (displayDetails !== null) {
+            safePerformance.mark('invokeDisplaySetContent:start');
             void this._invokeSafe('displaySetContent', {details: displayDetails});
         }
     }
@@ -330,7 +332,9 @@ export class Popup extends EventDispatcher {
     async setContentScale(scale) {
         this._contentScale = scale;
         this._frame.style.fontSize = `${scale}px`;
-        await this._invokeSafe('displaySetContentScale', {scale});
+        if (this._frameClient !== null && this._frameClient.isConnected() && this._frame.contentWindow !== null) {
+            await this._invokeSafe('displaySetContentScale', {scale});
+        }
     }
 
     /**
@@ -661,7 +665,6 @@ export class Popup extends EventDispatcher {
         this._visibleValue = value;
         this._frame.style.setProperty('visibility', value ? 'visible' : 'hidden', 'important');
         void this._invokeSafe('displayVisibilityChanged', {value});
-
         if (value) {
             window.dispatchEvent(new CustomEvent('yomitan-popup-shown'));
         } else {

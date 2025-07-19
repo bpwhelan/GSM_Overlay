@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2016-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,14 +17,23 @@
  */
 
 import {ExtensionError} from '../core/extension-error.js';
+import {log} from '../core/log.js';
 
 export class API {
     /**
      * @param {import('../extension/web-extension.js').WebExtension} webExtension
+     * @param {Worker?} mediaDrawingWorker
+     * @param {MessagePort?} backendPort
      */
-    constructor(webExtension) {
+    constructor(webExtension, mediaDrawingWorker = null, backendPort = null) {
         /** @type {import('../extension/web-extension.js').WebExtension} */
         this._webExtension = webExtension;
+
+        /** @type {Worker?} */
+        this._mediaDrawingWorker = mediaDrawingWorker;
+
+        /** @type {MessagePort?} */
+        this._backendPort = backendPort;
     }
 
     /**
@@ -255,6 +264,14 @@ export class API {
     }
 
     /**
+     * @param {import('api').PmApiParam<'drawMedia', 'requests'>} requests
+     * @param {Transferable[]} transferables
+     */
+    drawMedia(requests, transferables) {
+        this._mediaDrawingWorker?.postMessage({action: 'drawMedia', params: {requests}}, transferables);
+    }
+
+    /**
      * @param {import('api').ApiParam<'logGenericErrorBackend', 'error'>} error
      * @param {import('api').ApiParam<'logGenericErrorBackend', 'level'>} level
      * @param {import('api').ApiParam<'logGenericErrorBackend', 'context'>} context
@@ -330,6 +347,14 @@ export class API {
     }
 
     /**
+     * @param {string} url
+     * @returns {Promise<import('api').ApiReturn<'testYomitanApi'>>}
+     */
+    testYomitanApi(url) {
+        return this._invoke('testYomitanApi', {url});
+    }
+
+    /**
      * @param {import('api').ApiParam<'isTextLookupWorthy', 'text'>} text
      * @param {import('api').ApiParam<'isTextLookupWorthy', 'language'>} language
      * @returns {Promise<import('api').ApiReturn<'isTextLookupWorthy'>>}
@@ -365,6 +390,37 @@ export class API {
     }
 
     /**
+     * This is used to keep the background page alive on Firefox MV3, as it does not support offscreen.
+     * The reason that backend persistency is required on FF is actually different from the reason it's required on Chromium --
+     * on Chromium, persistency (which we achieve via the offscreen page, not via this heartbeat) is required because the load time
+     * for the IndexedDB is incredibly long, which makes the first lookup after the extension sleeps take one minute+, which is
+     * not acceptable. However, on Firefox, the database is backed by sqlite and starts very fast. Instead, the problem is that the
+     * media-drawing-worker on the frontend holds a MessagePort to the database-worker on the backend, which closes when the extension
+     * sleeps, because the database-worker is killed and currently there is no way to detect a closed port due to
+     * https://github.com/whatwg/html/issues/1766 / https://github.com/whatwg/html/issues/10201
+     *
+     * So this is our only choice. We can remove this once there is a way to gracefully detect the closed MessagePort and rebuild it.
+     * @returns {Promise<import('api').ApiReturn<'heartbeat'>>}
+     */
+    heartbeat() {
+        return this._invoke('heartbeat', void 0);
+    }
+
+    /**
+     * @param {Transferable[]} transferables
+     */
+    registerOffscreenPort(transferables) {
+        this._pmInvoke('registerOffscreenPort', void 0, transferables);
+    }
+
+    /**
+     * @param {MessagePort} port
+     */
+    connectToDatabaseWorker(port) {
+        this._pmInvoke('connectToDatabaseWorker', void 0, [port]);
+    }
+
+    /**
      * @returns {Promise<import('api').ApiReturn<'getLanguageSummaries'>>}
      */
     getLanguageSummaries() {
@@ -390,10 +446,10 @@ export class API {
                     if (response !== null && typeof response === 'object') {
                         const {error} = /** @type {import('core').UnknownObject} */ (response);
                         if (typeof error !== 'undefined') {
-                            reject(ExtensionError.deserialize(/** @type {import('core').SerializedError} */ (error)));
+                            reject(ExtensionError.deserialize(/** @type {import('core').SerializedError} */(error)));
                         } else {
                             const {result} = /** @type {import('core').UnknownObject} */ (response);
-                            resolve(/** @type {import('api').ApiReturn<TAction>} */ (result));
+                            resolve(/** @type {import('api').ApiReturn<TAction>} */(result));
                         }
                     } else {
                         const message = response === null ? 'Unexpected null response. You may need to refresh the page.' : `Unexpected response of type ${typeof response}. You may need to refresh the page.`;
@@ -404,5 +460,32 @@ export class API {
                 reject(e);
             }
         });
+    }
+
+    /**
+     * @template {import('api').PmApiNames} TAction
+     * @template {import('api').PmApiParams<TAction>} TParams
+     * @param {TAction} action
+     * @param {TParams} params
+     * @param {Transferable[]} transferables
+     */
+    _pmInvoke(action, params, transferables) {
+        // on firefox, there is no service worker, so we instead use a MessageChannel which is established
+        // via a handshake via a SharedWorker
+        if (!('serviceWorker' in navigator)) {
+            if (this._backendPort === null) {
+                log.error('no backend port available');
+                return;
+            }
+            this._backendPort.postMessage({action, params}, transferables);
+        } else {
+            void navigator.serviceWorker.ready.then((serviceWorkerRegistration) => {
+                if (serviceWorkerRegistration.active !== null) {
+                    serviceWorkerRegistration.active.postMessage({action, params}, transferables);
+                } else {
+                    log.error(`[${self.constructor.name}] no active service worker`);
+                }
+            });
+        }
     }
 }

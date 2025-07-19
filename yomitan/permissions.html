@@ -37,6 +37,9 @@
                     request audio for playback and download, and connect with Anki.
                 </div>
             </div>
+            <div class="settings-item-right">
+                <label class="toggle"><input type="checkbox" class="permissions-origin-toggle" data-origin="&lt;all_urls&gt;"><span class="toggle-body"><span class="toggle-track"></span><span class="toggle-knob"></span></span></label>
+            </div>
         </div></div>
         <div class="settings-item"><div class="settings-item-inner">
             <div class="settings-item-left">
@@ -74,6 +77,14 @@
         </div></div>
         <div class="settings-item"><div class="settings-item-inner">
             <div class="settings-item-left">
+                <div class="settings-item-label"><code>contextMenus</code></div>
+                <div class="settings-item-description">
+                    Yomitan adds a context menu interface that lets you look up highlighted words.
+                </div>
+            </div>
+        </div></div>
+        <div class="settings-item"><div class="settings-item-inner">
+            <div class="settings-item-left">
                 <div class="settings-item-label"><code>clipboardWrite</code></div>
                 <div class="settings-item-description">
                     Yomitan supports simulating the <code>Ctrl+C</code> (copy to clipboard) keyboard shortcut
@@ -85,7 +96,7 @@
             <div class="settings-item-left">
                 <div class="settings-item-label"><code>clipboardRead</code> <span class="light">(optional)</span></div>
                 <div class="settings-item-description">
-                    Yomitan supports automatically opening a search window when Japanese text is copied to the clipboard
+                    Yomitan supports automatically opening a search window when text is copied to the clipboard
                     while the browser is running, depending on how certain settings are configured.
                     This allows Yomitan to support scanning text from external applications, provided there is a way
                     to copy text from those applications to the clipboard.
@@ -116,8 +127,11 @@
                     <p>
                         When enabled, Yomitan is able to scan text and show definitions in private/incognito web browser windows.
                     </p>
-                    <p>
+                    <p data-hide-for-browser="firefox firefox-mobile">
                         This option can be configured from the web browser's <a tabindex="0" class="extension-settings-link" data-special-url="chrome://extensions/?id={id}">extension settings pages</a>.
+                    </p>
+                    <p data-show-for-browser="firefox firefox-mobile">
+                        This option can be configured from the web browser's extension settings pages. From your browser's address bar, go to <code>about:addons</code> and navigate to the settings for Yomitan.
                     </p>
                 </div>
             </div>

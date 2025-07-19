@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2020-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -38,6 +38,8 @@ export function getImageMediaTypeFromFileName(path) {
     switch (getFileNameExtension(path).toLowerCase()) {
         case '.apng':
             return 'image/apng';
+        case '.avif':
+            return 'image/avif';
         case '.bmp':
             return 'image/bmp';
         case '.gif':
@@ -75,6 +77,8 @@ export function getFileExtensionFromImageMediaType(mediaType) {
     switch (mediaType) {
         case 'image/apng':
             return '.apng';
+        case 'image/avif':
+            return '.avif';
         case 'image/bmp':
             return '.bmp';
         case 'image/gif':

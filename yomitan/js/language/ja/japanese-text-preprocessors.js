@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024  Yomitan Authors
+ * Copyright (C) 2024-2025  Yomitan Authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,8 +24,10 @@ import {
     convertHalfWidthKanaToFullWidth,
     convertHiraganaToKatakana as convertHiraganaToKatakanaFunction,
     convertKatakanaToHiragana as convertKatakanaToHiraganaFunction,
+    normalizeCJKCompatibilityCharacters as normalizeCJKCompatibilityCharactersFunction,
     normalizeCombiningCharacters as normalizeCombiningCharactersFunction,
 } from './japanese.js';
+import {convertVariants} from '../../../lib/kanji-processor.js';
 
 /** @type {import('language').TextProcessor<boolean>} */
 export const convertHalfWidthCharacters = {
@@ -34,7 +36,6 @@ export const convertHalfWidthCharacters = {
     options: basicTextProcessorOptions,
     process: (str, setting) => (setting ? convertHalfWidthKanaToFullWidth(str) : str),
 };
-
 
 /** @type {import('language').TextProcessor<boolean>} */
 export const alphabeticToHiragana = {
@@ -98,4 +99,20 @@ export const normalizeCombiningCharacters = {
     description: 'ド → ド (U+30C8 U+3099 → U+30C9)',
     options: basicTextProcessorOptions,
     process: (str, setting) => (setting ? normalizeCombiningCharactersFunction(str) : str),
+};
+
+/** @type {import('language').TextProcessor<boolean>} */
+export const normalizeCJKCompatibilityCharacters = {
+    name: 'Normalize CJK Compatibility Characters',
+    description: '㌀ → アパート',
+    options: basicTextProcessorOptions,
+    process: (str, setting) => (setting ? normalizeCJKCompatibilityCharactersFunction(str) : str),
+};
+
+/** @type {import('language').TextProcessor<boolean>} */
+export const standardizeKanji = {
+    name: 'Convert kanji variants to their modern standard form',
+    description: '萬 → 万',
+    options: basicTextProcessorOptions,
+    process: (str, setting) => (setting ? convertVariants(str) : str),
 };

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024  Yomitan Authors
+ * Copyright (C) 2024-2025  Yomitan Authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import {CJK_IDEOGRAPH_RANGES, isCodePointInRange, isCodePointInRanges} from '../CJK-util.js';
+import {CJK_COMPATIBILITY, CJK_IDEOGRAPH_RANGES, isCodePointInRange, isCodePointInRanges} from '../CJK-util.js';
 
 
 const HIRAGANA_SMALL_TSU_CODE_POINT = 0x3063;
@@ -352,24 +352,28 @@ export function isStringPartiallyJapanese(str) {
 
 /**
  * @param {number} moraIndex
- * @param {number} pitchAccentDownstepPosition
+ * @param {number | string} pitchAccentValue
  * @returns {boolean}
  */
-export function isMoraPitchHigh(moraIndex, pitchAccentDownstepPosition) {
-    switch (pitchAccentDownstepPosition) {
+export function isMoraPitchHigh(moraIndex, pitchAccentValue) {
+    if (typeof pitchAccentValue === 'string') {
+        return pitchAccentValue[moraIndex] === 'H';
+    }
+    switch (pitchAccentValue) {
         case 0: return (moraIndex > 0);
         case 1: return (moraIndex < 1);
-        default: return (moraIndex > 0 && moraIndex < pitchAccentDownstepPosition);
+        default: return (moraIndex > 0 && moraIndex < pitchAccentValue);
     }
 }
 
 /**
  * @param {string} text
- * @param {number} pitchAccentDownstepPosition
+ * @param {number | string} pitchAccentValue
  * @param {boolean} isVerbOrAdjective
  * @returns {?import('japanese-util').PitchCategory}
  */
-export function getPitchCategory(text, pitchAccentDownstepPosition, isVerbOrAdjective) {
+export function getPitchCategory(text, pitchAccentValue, isVerbOrAdjective) {
+    const pitchAccentDownstepPosition = typeof pitchAccentValue === 'string' ? getDownstepPositions(pitchAccentValue)[0] : pitchAccentValue;
     if (pitchAccentDownstepPosition === 0) {
         return 'heiban';
     }
@@ -383,6 +387,24 @@ export function getPitchCategory(text, pitchAccentDownstepPosition, isVerbOrAdje
         return pitchAccentDownstepPosition >= getKanaMoraCount(text) ? 'odaka' : 'nakadaka';
     }
     return null;
+}
+
+/**
+ * @param {string} pitchString
+ * @returns {number[]}
+ */
+export function getDownstepPositions(pitchString) {
+    const downsteps = [];
+    const moraCount = pitchString.length;
+    for (let i = 0; i < moraCount; i++) {
+        if (i > 0 && pitchString[i - 1] === 'H' && pitchString[i] === 'L') {
+            downsteps.push(i);
+        }
+    }
+    if (downsteps.length === 0) {
+        downsteps.push(pitchString.startsWith('L') ? 0 : -1);
+    }
+    return downsteps;
 }
 
 /**
@@ -621,6 +643,19 @@ export function normalizeCombiningCharacters(text) {
     return result;
 }
 
+/**
+ * @param {string} text
+ * @returns {string}
+ */
+export function normalizeCJKCompatibilityCharacters(text) {
+    let result = '';
+    for (let i = 0; i < text.length; i++) {
+        const codePoint = text[i].codePointAt(0);
+        result += codePoint && isCodePointInRange(codePoint, CJK_COMPATIBILITY) ? text[i].normalize('NFKD') : text[i];
+    }
+    return result;
+}
+
 // Furigana distribution
 
 /**
@@ -730,31 +765,57 @@ export function distributeFuriganaInflected(term, reading, source) {
 // Miscellaneous
 
 /**
+ * @param {number} codePoint
+ * @returns {boolean}
+ */
+export function isEmphaticCodePoint(codePoint) {
+    return (
+        codePoint === HIRAGANA_SMALL_TSU_CODE_POINT ||
+        codePoint === KATAKANA_SMALL_TSU_CODE_POINT ||
+        codePoint === KANA_PROLONGED_SOUND_MARK_CODE_POINT
+    );
+}
+
+/**
  * @param {string} text
  * @param {boolean} fullCollapse
  * @returns {string}
  */
 export function collapseEmphaticSequences(text, fullCollapse) {
-    let result = '';
-    let collapseCodePoint = -1;
-    for (const char of text) {
-        const c = char.codePointAt(0);
-        if (
-            c === HIRAGANA_SMALL_TSU_CODE_POINT ||
-            c === KATAKANA_SMALL_TSU_CODE_POINT ||
-            c === KANA_PROLONGED_SOUND_MARK_CODE_POINT
-        ) {
-            if (collapseCodePoint !== c) {
-                collapseCodePoint = c;
+    let left = 0;
+    while (left < text.length && isEmphaticCodePoint(/** @type {number} */ (text.codePointAt(left)))) {
+        ++left;
+    }
+    let right = text.length - 1;
+    while (right >= 0 && isEmphaticCodePoint(/** @type {number} */ (text.codePointAt(right)))) {
+        --right;
+    }
+    // Whole string is emphatic
+    if (left > right) {
+        return text;
+    }
+
+    const leadingEmphatics = text.substring(0, left);
+    const trailingEmphatics = text.substring(right + 1);
+    let middle = '';
+    let currentCollapsedCodePoint = -1;
+
+    for (let i = left; i <= right; ++i) {
+        const char = text[i];
+        const codePoint = /** @type {number} */ (char.codePointAt(0));
+        if (isEmphaticCodePoint(codePoint)) {
+            if (currentCollapsedCodePoint !== codePoint) {
+                currentCollapsedCodePoint = codePoint;
                 if (!fullCollapse) {
-                    result += char;
+                    middle += char;
                     continue;
                 }
             }
         } else {
-            collapseCodePoint = -1;
-            result += char;
+            currentCollapsedCodePoint = -1;
+            middle += char;
         }
     }
-    return result;
+
+    return leadingEmphatics + middle + trailingEmphatics;
 }

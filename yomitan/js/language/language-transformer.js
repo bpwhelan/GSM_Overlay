@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024  Yomitan Authors
+ * Copyright (C) 2024-2025  Yomitan Authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,8 +38,6 @@ export class LanguageTransformer {
     }
 
     /**
-     * Note: this function does not currently combine properly with previous descriptors,
-     * they are treated as completely separate collections. This should eventually be changed.
      * @param {import('language-transformer').LanguageTransformDescriptor} descriptor
      * @throws {Error}
      */
@@ -133,7 +131,7 @@ export class LanguageTransformer {
 
                     const isCycle = trace.some((frame) => frame.transform === id && frame.ruleIndex === j && frame.text === text);
                     if (isCycle) {
-                        log.warn(new Error(`Cycle detected in transform[${name}] rule[${j}] for text: ${text}\nTrace: ${JSON.stringify(trace)}`));
+                        log.warn(new Error(`Cycle detected in transform[${id}] rule[${j}] for text: ${text}\nTrace: ${JSON.stringify(trace)}`));
                         continue;
                     }
 

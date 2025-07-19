@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2020-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -40,6 +40,7 @@ import {PersistentStorageController} from './persistent-storage-controller.js';
 import {PopupPreviewController} from './popup-preview-controller.js';
 import {PopupWindowController} from './popup-window-controller.js';
 import {ProfileController} from './profile-controller.js';
+import {RecommendedSettingsController} from './recommended-settings-controller.js';
 import {ScanInputsController} from './scan-inputs-controller.js';
 import {ScanInputsSimpleController} from './scan-inputs-simple-controller.js';
 import {SecondarySearchDictionaryController} from './secondary-search-dictionary-controller.js';
@@ -50,6 +51,7 @@ import {SortFrequencyDictionaryController} from './sort-frequency-dictionary-con
 import {StatusFooter} from './status-footer.js';
 import {StorageController} from './storage-controller.js';
 import {TranslationTextReplacementsController} from './translation-text-replacements-controller.js';
+import {YomitanApiController} from './yomitan-api-controller.js';
 
 /**
  * @param {GenericSettingController} genericSettingController
@@ -85,8 +87,8 @@ await Application.main(true, async (application) => {
 
     const preparePromises = [];
 
-    const modalController = new ModalController();
-    modalController.prepare();
+    const modalController = new ModalController(['shared-modals', 'settings-modals']);
+    await modalController.prepare();
 
     const settingsController = new SettingsController(application);
     await settingsController.prepare();
@@ -123,7 +125,7 @@ await Application.main(true, async (application) => {
     const settingsBackup = new BackupController(settingsController, modalController);
     preparePromises.push(settingsBackup.prepare());
 
-    const ankiController = new AnkiController(settingsController);
+    const ankiController = new AnkiController(settingsController, application, modalController);
     preparePromises.push(ankiController.prepare());
 
     const ankiDeckGeneratorController = new AnkiDeckGeneratorController(application, settingsController, modalController, ankiController);
@@ -168,12 +170,17 @@ await Application.main(true, async (application) => {
     const mecabController = new MecabController(application.api);
     mecabController.prepare();
 
+    const yomitanApiController = new YomitanApiController(application.api);
+    yomitanApiController.prepare();
+
     const collapsibleDictionaryController = new CollapsibleDictionaryController(settingsController);
     preparePromises.push(collapsibleDictionaryController.prepare());
 
     const sortFrequencyDictionaryController = new SortFrequencyDictionaryController(settingsController);
     preparePromises.push(sortFrequencyDictionaryController.prepare());
 
+    const recommendedSettingsController = new RecommendedSettingsController(settingsController);
+    preparePromises.push(recommendedSettingsController.prepare());
 
     await Promise.all(preparePromises);
 

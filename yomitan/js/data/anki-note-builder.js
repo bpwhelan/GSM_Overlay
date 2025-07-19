@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2020-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,7 @@
  */
 
 import {ExtensionError} from '../core/extension-error.js';
-import {deferPromise} from '../core/utilities.js';
+import {deferPromise, sanitizeCSS} from '../core/utilities.js';
 import {convertHiraganaToKatakana, convertKatakanaToHiragana} from '../language/ja/japanese.js';
 import {cloneFieldMarkerPattern, getRootDeckName} from './anki-util.js';
 
@@ -46,12 +46,9 @@ export class AnkiNoteBuilder {
      */
     async createNote({
         dictionaryEntry,
-        mode,
+        cardFormat,
         context,
         template,
-        deckName,
-        modelName,
-        fields,
         tags = [],
         requirements = [],
         duplicateScope = 'collection',
@@ -62,6 +59,8 @@ export class AnkiNoteBuilder {
         mediaOptions = null,
         dictionaryStylesMap = new Map(),
     }) {
+        const {deck: deckName, model: modelName, fields: fieldsSettings} = cardFormat;
+        const fields = Object.entries(fieldsSettings);
         let duplicateScopeDeckName = null;
         let duplicateScopeCheckChildren = false;
         if (duplicateScope === 'deck-root') {
@@ -81,9 +80,19 @@ export class AnkiNoteBuilder {
             }
         }
 
-        const commonData = this._createData(dictionaryEntry, mode, context, resultOutputMode, glossaryLayoutMode, compactTags, media, dictionaryStylesMap);
+        // Make URL field blank if URL source is Yomitan
+        try {
+            const url = new URL(context.url);
+            if (url.protocol === new URL(import.meta.url).protocol) {
+                context.url = '';
+            }
+        } catch (e) {
+            // Ignore
+        }
+
+        const commonData = this._createData(dictionaryEntry, cardFormat, context, resultOutputMode, glossaryLayoutMode, compactTags, media, dictionaryStylesMap);
         const formattedFieldValuePromises = [];
-        for (const [, fieldValue] of fields) {
+        for (const [, {value: fieldValue}] of fields) {
             const formattedFieldValuePromise = this._formatField(fieldValue, commonData, template);
             formattedFieldValuePromises.push(formattedFieldValuePromise);
         }
@@ -130,7 +139,7 @@ export class AnkiNoteBuilder {
      */
     async getRenderingData({
         dictionaryEntry,
-        mode,
+        cardFormat,
         context,
         resultOutputMode = 'split',
         glossaryLayoutMode = 'default',
@@ -138,7 +147,7 @@ export class AnkiNoteBuilder {
         marker,
         dictionaryStylesMap,
     }) {
-        const commonData = this._createData(dictionaryEntry, mode, context, resultOutputMode, glossaryLayoutMode, compactTags, void 0, dictionaryStylesMap);
+        const commonData = this._createData(dictionaryEntry, cardFormat, context, resultOutputMode, glossaryLayoutMode, compactTags, void 0, dictionaryStylesMap);
         return await this._templateRenderer.getModifiedData({marker, commonData}, 'ankiNote');
     }
 
@@ -182,7 +191,7 @@ export class AnkiNoteBuilder {
         for (const dictionary of dictionaries) {
             const {name, styles} = dictionary;
             if (typeof styles === 'string') {
-                styleMap.set(name, styles);
+                styleMap.set(name, sanitizeCSS(styles));
             }
         }
         return styleMap;
@@ -192,7 +201,7 @@ export class AnkiNoteBuilder {
 
     /**
      * @param {import('dictionary').DictionaryEntry} dictionaryEntry
-     * @param {import('anki-templates-internal').CreateMode} mode
+     * @param {import('settings').AnkiCardFormat} cardFormat
      * @param {import('anki-templates-internal').Context} context
      * @param {import('settings').ResultOutputMode} resultOutputMode
      * @param {import('settings').GlossaryLayoutMode} glossaryLayoutMode
@@ -201,10 +210,10 @@ export class AnkiNoteBuilder {
      * @param {Map<string, string>} dictionaryStylesMap
      * @returns {import('anki-note-builder').CommonData}
      */
-    _createData(dictionaryEntry, mode, context, resultOutputMode, glossaryLayoutMode, compactTags, media, dictionaryStylesMap) {
+    _createData(dictionaryEntry, cardFormat, context, resultOutputMode, glossaryLayoutMode, compactTags, media, dictionaryStylesMap) {
         return {
             dictionaryEntry,
-            mode,
+            cardFormat,
             context,
             resultOutputMode,
             glossaryLayoutMode,
@@ -389,7 +398,7 @@ export class AnkiNoteBuilder {
         let injectScreenshot = false;
         let injectClipboardImage = false;
         let injectClipboardText = false;
-        let injectSelectionText = false;
+        let injectPopupSelectionText = false;
         /** @type {import('anki-note-builder').TextFuriganaDetails[]} */
         const textFuriganaDetails = [];
         /** @type {import('api').InjectAnkiNoteMediaDictionaryMediaDetails[]} */
@@ -401,7 +410,7 @@ export class AnkiNoteBuilder {
                 case 'screenshot': injectScreenshot = true; break;
                 case 'clipboardImage': injectClipboardImage = true; break;
                 case 'clipboardText': injectClipboardText = true; break;
-                case 'selectionText': injectSelectionText = true; break;
+                case 'popupSelectionText': injectPopupSelectionText = true; break;
                 case 'textFurigana':
                     {
                         const {text, readingMode} = requirement;
@@ -451,7 +460,7 @@ export class AnkiNoteBuilder {
         }
 
         // Inject media
-        const selectionText = injectSelectionText ? this._getSelectionText() : null;
+        const popupSelectionText = injectPopupSelectionText ? this._getPopupSelectionText() : null;
         const injectedMedia = await this._api.injectAnkiNoteMedia(
             timestamp,
             dictionaryEntryDetails,
@@ -480,7 +489,7 @@ export class AnkiNoteBuilder {
             screenshot: (typeof screenshotFileName === 'string' ? {value: screenshotFileName} : void 0),
             clipboardImage: (typeof clipboardImageFileName === 'string' ? {value: clipboardImageFileName} : void 0),
             clipboardText: (typeof clipboardText === 'string' ? {value: clipboardText} : void 0),
-            selectionText: (typeof selectionText === 'string' ? {value: selectionText} : void 0),
+            popupSelectionText: (typeof popupSelectionText === 'string' ? {value: popupSelectionText} : void 0),
             textFurigana,
             dictionaryMedia,
         };
@@ -490,7 +499,7 @@ export class AnkiNoteBuilder {
     /**
      * @returns {string}
      */
-    _getSelectionText() {
+    _getPopupSelectionText() {
         const selection = document.getSelection();
         return selection !== null ? selection.toString() : '';
     }
@@ -512,48 +521,70 @@ export class AnkiNoteBuilder {
                 break;
             }
             if (data !== null) {
-                const value = this._createFuriganaHtml(data, readingMode);
-                results.push({text, readingMode, details: {value}});
+                const valueHtml = createFuriganaHtml(data, readingMode);
+                const valuePlain = createFuriganaPlain(data, readingMode);
+                results.push({text, readingMode, detailsHtml: {value: valueHtml}, detailsPlain: {value: valuePlain}});
             }
         }
         return results;
     }
+}
 
-    /**
-     * @param {import('api').ParseTextLine[]} data
-     * @param {?import('anki-templates').TextFuriganaReadingMode} readingMode
-     * @returns {string}
-     */
-    _createFuriganaHtml(data, readingMode) {
-        let result = '';
-        for (const term of data) {
-            result += '<span class="term">';
-            for (const {text, reading} of term) {
-                if (reading.length > 0) {
-                    const reading2 = this._convertReading(reading, readingMode);
-                    result += `<ruby>${text}<rt>${reading2}</rt></ruby>`;
-                } else {
-                    result += text;
-                }
+/**
+ * @param {import('api').ParseTextLine[]} data
+ * @param {?import('anki-templates').TextFuriganaReadingMode} readingMode
+ * @returns {string}
+ */
+export function createFuriganaHtml(data, readingMode) {
+    let result = '';
+    for (const term of data) {
+        result += '<span class="term">';
+        for (const {text, reading} of term) {
+            if (reading.length > 0) {
+                const reading2 = convertReading(reading, readingMode);
+                result += `<ruby>${text}<rt>${reading2}</rt></ruby>`;
+            } else {
+                result += text;
             }
-            result += '</span>';
         }
-        return result;
+        result += '</span>';
     }
+    return result;
+}
 
-    /**
-     * @param {string} reading
-     * @param {?import('anki-templates').TextFuriganaReadingMode} readingMode
-     * @returns {string}
-     */
-    _convertReading(reading, readingMode) {
-        switch (readingMode) {
-            case 'hiragana':
-                return convertKatakanaToHiragana(reading);
-            case 'katakana':
-                return convertHiraganaToKatakana(reading);
-            default:
-                return reading;
+/**
+ * @param {import('api').ParseTextLine[]} data
+ * @param {?import('anki-templates').TextFuriganaReadingMode} readingMode
+ * @returns {string}
+ */
+export function createFuriganaPlain(data, readingMode) {
+    let result = '';
+    for (const term of data) {
+        for (const {text, reading} of term) {
+            if (reading.length > 0) {
+                const reading2 = convertReading(reading, readingMode);
+                result += ` ${text}[${reading2}]`;
+            } else {
+                result += text;
+            }
         }
+    }
+    result = result.trimStart();
+    return result;
+}
+
+/**
+ * @param {string} reading
+ * @param {?import('anki-templates').TextFuriganaReadingMode} readingMode
+ * @returns {string}
+ */
+function convertReading(reading, readingMode) {
+    switch (readingMode) {
+        case 'hiragana':
+            return convertKatakanaToHiragana(reading);
+        case 'katakana':
+            return convertHiraganaToKatakana(reading);
+        default:
+            return reading;
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2016-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -66,6 +66,14 @@ export class TextSourceElement {
      */
     get fullContent() {
         return this._fullContent;
+    }
+
+    /**
+     * The string representing the element's constrained text value.
+     * @type {string}
+     */
+    get content() {
+        return this._content;
     }
 
     /**

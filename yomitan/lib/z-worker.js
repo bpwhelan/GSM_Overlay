@@ -1137,11 +1137,11 @@ function pipeThroughCommpressionStream(readable, useCompressionStream, options, 
   try {
     const CompressionStream = useCompressionStream && CodecStreamNative ? CodecStreamNative : CodecStream2;
     readable = pipeThrough(readable, new CompressionStream(COMPRESSION_FORMAT, options));
-  } catch (error) {
+  } catch (_error) {
     if (useCompressionStream) {
       try {
         readable = pipeThrough(readable, new CodecStream2(COMPRESSION_FORMAT, options));
-      } catch (error2) {
+      } catch (_error2) {
         return readable;
       }
     } else {
@@ -1282,7 +1282,7 @@ async function init(message) {
         } else {
           await imporModuleScripts(scripts);
         }
-      } catch (error) {
+      } catch (_error) {
         importScriptSupported = false;
         await imporModuleScripts(scripts);
       }
@@ -5285,6 +5285,7 @@ function InfCodes() {
     m = q < s.read ? s.read - q - 1 : s.end - q;
     while (true) {
       switch (mode2) {
+        // waiting for "i:"=input, "o:"=output, "x:"=nothing
         case START:
           if (m >= 258 && n >= 10) {
             s.bitb = b;
@@ -5309,6 +5310,7 @@ function InfCodes() {
           tree = ltree;
           tree_index = ltree_index;
           mode2 = LEN;
+        /* falls through */
         case LEN:
           j = need;
           while (k < j) {
@@ -5386,6 +5388,7 @@ function InfCodes() {
           tree = dtree;
           tree_index = dtree_index;
           mode2 = DIST;
+        /* falls through */
         case DIST:
           j = need;
           while (k < j) {
@@ -5451,6 +5454,7 @@ function InfCodes() {
           b >>= j;
           k -= j;
           mode2 = COPY;
+        /* falls through */
         case COPY:
           f = q - dist;
           while (f < 0) {
@@ -5542,6 +5546,7 @@ function InfCodes() {
             return s.inflate_flush(z, r);
           }
           mode2 = END;
+        /* falls through */
         case END:
           r = Z_STREAM_END2;
           s.bitb = b;
@@ -5882,6 +5887,7 @@ function InfBlocks(z, w) {
           k -= 14;
           index = 0;
           mode2 = BTREE;
+        /* falls through */
         case BTREE:
           while (index < 4 + (table2 >>> 10)) {
             while (k < 3) {
@@ -5925,6 +5931,7 @@ function InfBlocks(z, w) {
           }
           index = 0;
           mode2 = DTREE;
+        /* falls through */
         case DTREE:
           while (true) {
             t = table2;
@@ -6026,6 +6033,7 @@ function InfBlocks(z, w) {
           }
           codes.init(bl_[0], bd_[0], hufts, tl_[0], hufts, td_[0]);
           mode2 = CODES;
+        /* falls through */
         case CODES:
           that.bitb = b;
           that.bitk = k;
@@ -6050,6 +6058,7 @@ function InfBlocks(z, w) {
             break;
           }
           mode2 = DRY;
+        /* falls through */
         case DRY:
           that.write = q;
           r = that.inflate_flush(z2, r);
@@ -6066,6 +6075,7 @@ function InfBlocks(z, w) {
             return that.inflate_flush(z2, r);
           }
           mode2 = DONELOCKS;
+        /* falls through */
         case DONELOCKS:
           r = Z_STREAM_END2;
           that.bitb = b;
@@ -6186,6 +6196,7 @@ function Inflate() {
             break;
           }
           istate.mode = FLAG;
+        /* falls through */
         case FLAG:
           if (z.avail_in === 0)
             return r;
@@ -6204,6 +6215,7 @@ function Inflate() {
             break;
           }
           istate.mode = DICT4;
+        /* falls through */
         case DICT4:
           if (z.avail_in === 0)
             return r;
@@ -6212,6 +6224,7 @@ function Inflate() {
           z.total_in++;
           istate.need = (z.read_byte(z.next_in_index++) & 255) << 24 & 4278190080;
           istate.mode = DICT3;
+        /* falls through */
         case DICT3:
           if (z.avail_in === 0)
             return r;
@@ -6220,6 +6233,7 @@ function Inflate() {
           z.total_in++;
           istate.need += (z.read_byte(z.next_in_index++) & 255) << 16 & 16711680;
           istate.mode = DICT2;
+        /* falls through */
         case DICT2:
           if (z.avail_in === 0)
             return r;
@@ -6228,6 +6242,7 @@ function Inflate() {
           z.total_in++;
           istate.need += (z.read_byte(z.next_in_index++) & 255) << 8 & 65280;
           istate.mode = DICT1;
+        /* falls through */
         case DICT1:
           if (z.avail_in === 0)
             return r;
@@ -6258,6 +6273,7 @@ function Inflate() {
           r = f;
           istate.blocks.reset(z, istate.was);
           istate.mode = DONE;
+        /* falls through */
         case DONE:
           z.avail_in = 0;
           return Z_STREAM_END2;

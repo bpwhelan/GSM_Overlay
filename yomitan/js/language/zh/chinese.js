@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024  Yomitan Authors
+ * Copyright (C) 2024-2025  Yomitan Authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -61,7 +61,15 @@ export function isStringPartiallyChinese(str) {
     return false;
 }
 
+/**
+ * @param {number} codePoint
+ * @returns {boolean}
+ */
+export function isCodePointChinese(codePoint) {
+    return isCodePointInRanges(codePoint, CHINESE_RANGES);
+}
+
 /** @type {import('language').ReadingNormalizer} */
 export function normalizePinyin(str) {
-    return str.normalize('NFC').toLowerCase().replace(/[\s・:]/g, '');
+    return str.normalize('NFC').toLowerCase().replace(/[\s・:'’-]|\/\//g, '');
 }

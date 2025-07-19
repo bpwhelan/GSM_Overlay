@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2020-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import {toError} from '../core/to-error.js';
+
 /**
  * @template {string} TObjectStoreName
  */
@@ -30,7 +32,7 @@ export class Database {
     /**
      * @param {string} databaseName
      * @param {number} version
-     * @param {import('database').StructureDefinition<TObjectStoreName>[]} structure
+     * @param {import('database').StructureDefinition<TObjectStoreName>[]?} structure
      */
     async open(databaseName, version, structure) {
         if (this._db !== null) {
@@ -43,8 +45,16 @@ export class Database {
         try {
             this._isOpening = true;
             this._db = await this._open(databaseName, version, (db, transaction, oldVersion) => {
-                this._upgrade(db, transaction, oldVersion, structure);
+                if (structure !== null) {
+                    this._upgrade(db, transaction, oldVersion, structure);
+                }
             });
+            if (this._db.objectStoreNames.length === 0) {
+                this.close();
+                await Database.deleteDatabase(databaseName);
+                this._isOpening = false;
+                await this.open(databaseName, version, structure);
+            }
         } finally {
             this._isOpening = false;
         }
@@ -89,7 +99,11 @@ export class Database {
         if (this._db === null) {
             throw new Error(this._isOpening ? 'Database not ready' : 'Database not open');
         }
-        return this._db.transaction(storeNames, mode);
+        try {
+            return this._db.transaction(storeNames, mode);
+        } catch (e) {
+            throw new Error(toError(e).message + '\nDatabase transaction error, you may need to Delete All dictionaries to reset the database or manually delete the Indexed DB database.');
+        }
     }
 
     /**

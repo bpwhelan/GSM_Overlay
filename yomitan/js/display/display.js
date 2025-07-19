@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2017-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -24,8 +24,9 @@ import {EventDispatcher} from '../core/event-dispatcher.js';
 import {EventListenerCollection} from '../core/event-listener-collection.js';
 import {ExtensionError} from '../core/extension-error.js';
 import {log} from '../core/log.js';
+import {safePerformance} from '../core/safe-performance.js';
 import {toError} from '../core/to-error.js';
-import {clone, deepEqual, promiseTimeout} from '../core/utilities.js';
+import {addScopeToCss, clone, deepEqual, promiseTimeout} from '../core/utilities.js';
 import {setProfile} from '../data/profiles-util.js';
 import {PopupMenu} from '../dom/popup-menu.js';
 import {querySelectorNotNull} from '../dom/query-selector.js';
@@ -98,6 +99,8 @@ export class Display extends EventDispatcher {
         this._historyHasChanged = false;
         /** @type {?Element} */
         this._aboveStickyHeader = document.querySelector('#above-sticky-header');
+        /** @type {?Element} */
+        this._searchHeader = document.querySelector('#sticky-search-header');
         /** @type {import('display').PageType} */
         this._contentType = 'clear';
         /** @type {string} */
@@ -158,6 +161,8 @@ export class Display extends EventDispatcher {
         this._frameEndpoint = (pageType === 'popup' ? new FrameEndpoint(this._application.api) : null);
         /** @type {?import('environment').Browser} */
         this._browser = null;
+        /** @type {?import('environment').OperatingSystem} */
+        this._platform = null;
         /** @type {?HTMLTextAreaElement} */
         this._copyTextarea = null;
         /** @type {?TextScanner} */
@@ -171,7 +176,7 @@ export class Display extends EventDispatcher {
         /** @type {OptionToggleHotkeyHandler} */
         this._optionToggleHotkeyHandler = new OptionToggleHotkeyHandler(this);
         /** @type {ElementOverflowController} */
-        this._elementOverflowController = new ElementOverflowController();
+        this._elementOverflowController = new ElementOverflowController(this);
         /** @type {boolean} */
         this._frameVisible = (pageType === 'search');
         /** @type {HTMLElement} */
@@ -194,6 +199,8 @@ export class Display extends EventDispatcher {
         this._themeController = new ThemeController(document.documentElement);
         /** @type {import('language').LanguageSummary[]} */
         this._languageSummaries = [];
+        /** @type {import('dictionary-importer').Summary[]} */
+        this._dictionaryInfo = [];
 
         /* eslint-disable @stylistic/no-multi-spaces */
         this._hotkeyHandler.registerActions([
@@ -311,14 +318,18 @@ export class Display extends EventDispatcher {
 
         // State setup
         const {documentElement} = document;
-        const {browser} = await this._application.api.getEnvironmentInfo();
+        const {browser, platform} = await this._application.api.getEnvironmentInfo();
         this._browser = browser;
+        this._platform = platform.os;
 
         if (documentElement !== null) {
             documentElement.dataset.browser = browser;
+            documentElement.dataset.platform = platform.os;
         }
 
         this._languageSummaries = await this._application.api.getLanguageSummaries();
+
+        this._dictionaryInfo = await this._application.api.getDictionaryInfo();
 
         // Prepare
         await this._hotkeyHelpController.prepare(this._application.api);
@@ -371,6 +382,16 @@ export class Display extends EventDispatcher {
         void this._onStateChanged();
         if (this._frameEndpoint !== null) {
             this._frameEndpoint.signal();
+        }
+    }
+
+    /**
+     * @param {Element} element
+     */
+    scrollUpToElementTop(element) {
+        const top = this._getElementTop(element);
+        if (this._windowScroll.y > top) {
+            this._windowScroll.toY(top);
         }
     }
 
@@ -435,6 +456,7 @@ export class Display extends EventDispatcher {
         this._updateHotkeys(options);
         this._updateDocumentOptions(options);
         this._setTheme(options);
+        this._setStickyHeader(options);
         this._hotkeyHelpController.setOptions(options);
         this._displayGenerator.updateHotkeys();
         this._displayGenerator.updateLanguage(options.general.language);
@@ -454,14 +476,13 @@ export class Display extends EventDispatcher {
                 normalizeCssZoom: scanningOptions.normalizeCssZoom,
                 selectText: scanningOptions.selectText,
                 delay: scanningOptions.delay,
-                touchInputEnabled: scanningOptions.touchInputEnabled,
-                pointerEventsEnabled: scanningOptions.pointerEventsEnabled,
                 scanLength: scanningOptions.length,
                 layoutAwareScan: scanningOptions.layoutAwareScan,
                 preventMiddleMouse: scanningOptions.preventMiddleMouse.onSearchQuery,
                 matchTypePrefix: false,
                 sentenceParsingOptions,
-                scanAltText: scanningOptions.scanAltText,
+                scanWithoutMousemove: scanningOptions.scanWithoutMousemove,
+                scanResolution: scanningOptions.scanResolution,
             },
         });
 
@@ -527,6 +548,19 @@ export class Display extends EventDispatcher {
     }
 
     /**
+     * @param {string} fontFamily
+     * @param {number} fontSize
+     * @param {string} lineHeight
+     */
+    setFontOptions(fontFamily, fontSize, lineHeight) {
+        // Setting these directly rather than using the existing CSS variables
+        // minimizes problems and ensures everything scales correctly
+        document.documentElement.style.fontFamily = fontFamily;
+        document.documentElement.style.fontSize = `${fontSize}px`;
+        document.documentElement.style.lineHeight = lineHeight;
+    }
+
+    /**
      * @param {import('display').DirectApiMapInit} handlers
      */
     registerDirectMessageHandlers(handlers) {
@@ -571,14 +605,14 @@ export class Display extends EventDispatcher {
         /** @type {import('display').HistoryState} */
         const newState = (
             hasState ?
-            clone(state) :
-            {
-                focusEntry: 0,
-                optionsContext: void 0,
-                url: window.location.href,
-                sentence: {text: query, offset: 0},
-                documentTitle: document.title,
-            }
+                clone(state) :
+                {
+                    focusEntry: 0,
+                    optionsContext: void 0,
+                    url: window.location.href,
+                    sentence: {text: query, offset: 0},
+                    documentTitle: document.title,
+                }
         );
         if (!hasState || updateOptionsContext) {
             newState.optionsContext = clone(this._optionsContext);
@@ -714,6 +748,7 @@ export class Display extends EventDispatcher {
 
     /** @type {import('display').DirectApiHandler<'displaySetContent'>} */
     _onMessageSetContent({details}) {
+        safePerformance.mark('invokeDisplaySetContent:end');
         this.setContent(details);
     }
 
@@ -767,22 +802,29 @@ export class Display extends EventDispatcher {
     async _onStateChanged() {
         if (this._historyChangeIgnore) { return; }
 
+        safePerformance.mark('display:_onStateChanged:start');
+
         /** @type {?import('core').TokenObject} */
         const token = {}; // Unique identifier token
         this._setContentToken = token;
         try {
             // Clear
+            safePerformance.mark('display:_onStateChanged:clear:start');
             this._closePopups();
             this._closeAllPopupMenus();
             this._eventListeners.removeAllEventListeners();
             this._contentManager.unloadAll();
             this._hideTagNotification(false);
+            this._hideInflectionNotification(false);
             this._triggerContentClear();
             this._dictionaryEntries = [];
             this._dictionaryEntryNodes = [];
             this._elementOverflowController.clearElements();
+            safePerformance.mark('display:_onStateChanged:clear:end');
+            safePerformance.measure('display:_onStateChanged:clear', 'display:_onStateChanged:clear:start', 'display:_onStateChanged:clear:end');
 
             // Prepare
+            safePerformance.mark('display:_onStateChanged:prepare:start');
             const urlSearchParams = new URLSearchParams(location.search);
             let type = urlSearchParams.get('type');
             if (type === null && urlSearchParams.get('query') !== null) { type = 'terms'; }
@@ -791,7 +833,10 @@ export class Display extends EventDispatcher {
             this._queryParserVisibleOverride = (fullVisible === null ? null : (fullVisible !== 'false'));
 
             this._historyHasChanged = true;
+            safePerformance.mark('display:_onStateChanged:prepare:end');
+            safePerformance.measure('display:_onStateChanged:prepare', 'display:_onStateChanged:prepare:start', 'display:_onStateChanged:prepare:end');
 
+            safePerformance.mark('display:_onStateChanged:setContent:start');
             // Set content
             switch (type) {
                 case 'terms':
@@ -808,9 +853,13 @@ export class Display extends EventDispatcher {
                     this._clearContent();
                     break;
             }
+            safePerformance.mark('display:_onStateChanged:setContent:end');
+            safePerformance.measure('display:_onStateChanged:setContent', 'display:_onStateChanged:setContent:start', 'display:_onStateChanged:setContent:end');
         } catch (e) {
             this.onError(toError(e));
         }
+        safePerformance.mark('display:_onStateChanged:end');
+        safePerformance.measure('display:_onStateChanged', 'display:_onStateChanged:start', 'display:_onStateChanged:end');
     }
 
     /**
@@ -823,8 +872,8 @@ export class Display extends EventDispatcher {
             eventType === 'click' ||
             !(typeof historyState === 'object' && historyState !== null) ||
             historyState.cause !== 'queryParser' ?
-            'new' :
-            'overwrite'
+                'new' :
+                'overwrite'
         );
         /** @type {import('display').ContentDetails} */
         const details = {
@@ -1141,6 +1190,14 @@ export class Display extends EventDispatcher {
     }
 
     /**
+     * @param {boolean} animate
+     */
+    _hideInflectionNotification(animate) {
+        if (this._inflectionNotification === null) { return; }
+        this._inflectionNotification.close(animate);
+    }
+
+    /**
      * @param {import('settings').ProfileOptions} options
      */
     _updateDocumentOptions(options) {
@@ -1149,6 +1206,7 @@ export class Display extends EventDispatcher {
         data.resultOutputMode = `${options.general.resultOutputMode}`;
         data.glossaryLayoutMode = `${options.general.glossaryLayoutMode}`;
         data.compactTags = `${options.general.compactTags}`;
+        data.averageFrequency = `${options.general.averageFrequency}`;
         data.frequencyDisplayMode = `${options.general.frequencyDisplayMode}`;
         data.termDisplayMode = `${options.general.termDisplayMode}`;
         data.enableSearchTags = `${options.scanning.enableSearchTags}`;
@@ -1167,7 +1225,7 @@ export class Display extends EventDispatcher {
      */
     _setTheme(options) {
         const {general} = options;
-        const {popupTheme, popupOuterTheme} = general;
+        const {popupTheme, popupOuterTheme, fontFamily, fontSize, lineHeight} = general;
         /** @type {string} */
         let pageType = this._pageType;
         try {
@@ -1189,6 +1247,7 @@ export class Display extends EventDispatcher {
         this._themeController.updateTheme();
         const customCss = this._getCustomCss(options);
         this.setCustomCss(customCss);
+        this.setFontOptions(fontFamily, fontSize, lineHeight);
     }
 
     /**
@@ -1200,7 +1259,8 @@ export class Display extends EventDispatcher {
         let customCss = customPopupCss;
         for (const {name, enabled, styles = ''} of dictionaries) {
             if (enabled) {
-                customCss += '\n' + this._addScopeToCss(styles, name);
+                const escapedTitle = name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                customCss += '\n' + addScopeToCss(styles, `[data-dictionary="${escapedTitle}"]`);
             }
         }
         this.setCustomCss(customCss);
@@ -1208,31 +1268,17 @@ export class Display extends EventDispatcher {
     }
 
     /**
-     * @param {string} css
-     * @param {string} dictionaryTitle
-     * @returns {string}
-     */
-    _addScopeToCss(css, dictionaryTitle) {
-        const escapedTitle = dictionaryTitle
-            .replace(/\\/g, '\\\\')
-            .replace(/"/g, '\\"');
-
-        const regex = /([^\r\n,{}]+)(\s*[,{])/g;
-        const replacement = `[data-dictionary="${escapedTitle}"] $1$2`;
-        return css.replace(regex, replacement);
-    }
-
-    /**
      * @param {boolean} isKanji
      * @param {string} source
+     * @param {string} primaryReading
      * @param {boolean} wildcardsEnabled
      * @param {import('settings').OptionsContext} optionsContext
      * @returns {Promise<import('dictionary').DictionaryEntry[]>}
      */
-    async _findDictionaryEntries(isKanji, source, wildcardsEnabled, optionsContext) {
+    async _findDictionaryEntries(isKanji, source, primaryReading, wildcardsEnabled, optionsContext) {
         /** @type {import('dictionary').DictionaryEntry[]} */
         let dictionaryEntries = [];
-        const {findDetails, source: source2} = this._getFindDetails(source, wildcardsEnabled);
+        const {findDetails, source: source2} = this._getFindDetails(source, primaryReading, wildcardsEnabled);
         if (isKanji) {
             dictionaryEntries = await this._application.api.kanjiFind(source, optionsContext);
             if (dictionaryEntries.length > 0) { return dictionaryEntries; }
@@ -1249,12 +1295,13 @@ export class Display extends EventDispatcher {
 
     /**
      * @param {string} source
+     * @param {string} primaryReading
      * @param {boolean} wildcardsEnabled
      * @returns {{findDetails: import('api').FindTermsDetails, source: string}}
      */
-    _getFindDetails(source, wildcardsEnabled) {
+    _getFindDetails(source, primaryReading, wildcardsEnabled) {
         /** @type {import('api').FindTermsDetails} */
-        const findDetails = {};
+        const findDetails = {primaryReading};
         if (wildcardsEnabled) {
             const match = /^([*\uff0a]*)([\w\W]*?)([*\uff0a]*)$/.exec(source);
             if (match !== null) {
@@ -1279,12 +1326,15 @@ export class Display extends EventDispatcher {
     async _setContentTermsOrKanji(type, urlSearchParams, token) {
         const lookup = (urlSearchParams.get('lookup') !== 'false');
         const wildcardsEnabled = (urlSearchParams.get('wildcards') !== 'off');
+        const hasEnabledDictionaries = this._options ? this._options.dictionaries.some(({enabled}) => enabled) : false;
 
         // Set query
+        safePerformance.mark('display:setQuery:start');
         let query = urlSearchParams.get('query');
         if (query === null) { query = ''; }
         let queryFull = urlSearchParams.get('full');
         queryFull = (queryFull !== null ? queryFull : query);
+        const primaryReading = urlSearchParams.get('primary_reading') ?? '';
         const queryOffsetString = urlSearchParams.get('offset');
         let queryOffset = 0;
         if (queryOffsetString !== null) {
@@ -1292,6 +1342,8 @@ export class Display extends EventDispatcher {
             queryOffset = Number.isFinite(queryOffset) ? Math.max(0, Math.min(queryFull.length - query.length, queryOffset)) : 0;
         }
         this._setQuery(query, queryFull, queryOffset);
+        safePerformance.mark('display:setQuery:end');
+        safePerformance.measure('display:setQuery', 'display:setQuery:start', 'display:setQuery:end');
 
         let {state, content} = this._history;
         let changeHistory = false;
@@ -1314,9 +1366,14 @@ export class Display extends EventDispatcher {
 
         let {dictionaryEntries} = content;
         if (!Array.isArray(dictionaryEntries)) {
-            dictionaryEntries = lookup && query.length > 0 ? await this._findDictionaryEntries(type === 'kanji', query, wildcardsEnabled, optionsContext) : [];
+            safePerformance.mark('display:findDictionaryEntries:start');
+            dictionaryEntries = hasEnabledDictionaries && lookup && query.length > 0 ? await this._findDictionaryEntries(type === 'kanji', query, primaryReading, wildcardsEnabled, optionsContext) : [];
+            safePerformance.mark('display:findDictionaryEntries:end');
+            safePerformance.measure('display:findDictionaryEntries', 'display:findDictionaryEntries:start', 'display:findDictionaryEntries:end');
             if (this._setContentToken !== token) { return; }
-            content.dictionaryEntries = dictionaryEntries;
+            if (lookup) {
+                content.dictionaryEntries = dictionaryEntries;
+            }
             changeHistory = true;
         }
 
@@ -1349,37 +1406,62 @@ export class Display extends EventDispatcher {
 
         this._dictionaryEntries = dictionaryEntries;
 
+        safePerformance.mark('display:updateNavigationAuto:start');
         this._updateNavigationAuto();
-        this._setNoContentVisible(dictionaryEntries.length === 0 && lookup);
+        safePerformance.mark('display:updateNavigationAuto:end');
+        safePerformance.measure('display:updateNavigationAuto', 'display:updateNavigationAuto:start', 'display:updateNavigationAuto:end');
+
+        this._setNoContentVisible(hasEnabledDictionaries && dictionaryEntries.length === 0 && lookup);
+        this._setNoDictionariesVisible(!hasEnabledDictionaries);
 
         const container = this._container;
         container.textContent = '';
 
+        safePerformance.mark('display:contentUpdate:start');
         this._triggerContentUpdateStart();
 
-        for (let i = 0, ii = dictionaryEntries.length; i < ii; ++i) {
+        let i = 0;
+        for (const dictionaryEntry of dictionaryEntries) {
+            safePerformance.mark('display:createEntry:start');
+
             if (i > 0) {
                 await promiseTimeout(1);
                 if (this._setContentToken !== token) { return; }
             }
 
-            const dictionaryEntry = dictionaryEntries[i];
+            safePerformance.mark('display:createEntryReal:start');
+
             const entry = (
                 dictionaryEntry.type === 'term' ?
-                this._displayGenerator.createTermEntry(dictionaryEntry) :
-                this._displayGenerator.createKanjiEntry(dictionaryEntry)
+                this._displayGenerator.createTermEntry(dictionaryEntry, this._dictionaryInfo) :
+                this._displayGenerator.createKanjiEntry(dictionaryEntry, this._dictionaryInfo)
             );
             entry.dataset.index = `${i}`;
             this._dictionaryEntryNodes.push(entry);
             this._addEntryEventListeners(entry);
             this._triggerContentUpdateEntry(dictionaryEntry, entry, i);
+            if (this._setContentToken !== token) { return; }
             container.appendChild(entry);
+
             if (focusEntry === i) {
                 this._focusEntry(i, 0, false);
             }
 
             this._elementOverflowController.addElements(entry);
+
+            safePerformance.mark('display:createEntryReal:end');
+            safePerformance.measure('display:createEntryReal', 'display:createEntryReal:start', 'display:createEntryReal:end');
+
+            safePerformance.mark('display:createEntry:end');
+            safePerformance.measure('display:createEntry', 'display:createEntry:start', 'display:createEntry:end');
+
+            if (i === 0) {
+                void this._contentManager.executeMediaRequests(); // prioritize loading media for first entry since it is visible
+            }
+            ++i;
         }
+        if (this._setContentToken !== token) { return; }
+        void this._contentManager.executeMediaRequests();
 
         if (typeof scrollX === 'number' || typeof scrollY === 'number') {
             let {x, y} = this._windowScroll;
@@ -1390,6 +1472,8 @@ export class Display extends EventDispatcher {
         }
 
         this._triggerContentUpdateComplete();
+        safePerformance.mark('display:contentUpdate:end');
+        safePerformance.measure('display:contentUpdate', 'display:contentUpdate:start', 'display:contentUpdate:end');
     }
 
     /** */
@@ -1407,6 +1491,7 @@ export class Display extends EventDispatcher {
 
         this._updateNavigation(false, false);
         this._setNoContentVisible(false);
+        this._setNoDictionariesVisible(false);
         this._setQuery('', '', 0);
 
         this._triggerContentUpdateStart();
@@ -1432,6 +1517,18 @@ export class Display extends EventDispatcher {
 
         if (noResults !== null) {
             noResults.hidden = !visible;
+        }
+    }
+
+    /**
+     * @param {boolean} visible
+     */
+    _setNoDictionariesVisible(visible) {
+        /** @type {?HTMLElement} */
+        const noDictionaries = document.querySelector('#no-dictionaries');
+
+        if (noDictionaries !== null) {
+            noDictionaries.hidden = !visible;
         }
     }
 
@@ -1548,8 +1645,13 @@ export class Display extends EventDispatcher {
         }
         let target = (index === 0 && definitionIndex <= 0) || node === null ? 0 : this._getElementTop(node);
 
-        if (this._aboveStickyHeader !== null && target !== 0) {
-            target += this._aboveStickyHeader.getBoundingClientRect().height;
+        if (target !== 0) {
+            if (this._aboveStickyHeader !== null) {
+                target += this._aboveStickyHeader.getBoundingClientRect().height;
+            }
+            if (!this._options?.general.stickySearchHeader && this._searchHeader) {
+                target += this._searchHeader.getBoundingClientRect().height;
+            }
         }
 
         this._windowScroll.stop();
@@ -1658,8 +1760,8 @@ export class Display extends EventDispatcher {
     _relativeTermView(next) {
         return (
             next ?
-            this._history.hasNext() && this._history.forward() :
-            this._history.hasPrevious() && this._history.back()
+                this._history.hasNext() && this._history.forward() :
+                this._history.hasPrevious() && this._history.back()
         );
     }
 
@@ -1744,8 +1846,8 @@ export class Display extends EventDispatcher {
     _isQueryParserVisible() {
         return (
             this._queryParserVisibleOverride !== null ?
-            this._queryParserVisibleOverride :
-            this._queryParserVisible
+                this._queryParserVisibleOverride :
+                this._queryParserVisible
         );
     }
 
@@ -1783,8 +1885,8 @@ export class Display extends EventDispatcher {
             this._childrenSupported &&
             (
                 (isSearchPage) ?
-                (options.scanning.enableOnSearchPage) :
-                (this._depth < options.scanning.popupNestingMaxDepth)
+                    (options.scanning.enableOnSearchPage) :
+                    (this._depth < options.scanning.popupNestingMaxDepth)
             )
         );
 
@@ -1867,7 +1969,7 @@ export class Display extends EventDispatcher {
                     /** @type {string} */
                     let text;
                     try {
-                        text = await this.invokeContentOrigin('frontendGetSelectionText', void 0);
+                        text = await this.invokeContentOrigin('frontendGetPopupSelectionText', void 0);
                     } catch (e) {
                         break;
                     }
@@ -1925,7 +2027,7 @@ export class Display extends EventDispatcher {
      * @param {import('settings').ProfileOptions} options
      */
     _updateContentTextScanner(options) {
-        if (!options.scanning.enablePopupSearch) {
+        if (!options.scanning.enablePopupSearch || (!options.scanning.enableOnSearchPage && this._pageType === 'search')) {
             if (this._contentTextScanner !== null) {
                 this._contentTextScanner.setEnabled(false);
                 this._contentTextScanner.clearSelection();
@@ -1946,6 +2048,7 @@ export class Display extends EventDispatcher {
             });
             this._contentTextScanner.includeSelector = '.click-scannable,.click-scannable *';
             this._contentTextScanner.excludeSelector = '.scan-disable,.scan-disable *';
+            this._contentTextScanner.touchEventExcludeSelector = null;
             this._contentTextScanner.prepare();
             this._contentTextScanner.on('clear', this._onContentTextScannerClear.bind(this));
             this._contentTextScanner.on('searchSuccess', this._onContentTextScannerSearchSuccess.bind(this));
@@ -1973,19 +2076,17 @@ export class Display extends EventDispatcher {
                     scanOnPenRelease: false,
                     preventTouchScrolling: false,
                     preventPenScrolling: false,
+                    minimumTouchTime: 0,
                 },
             }],
             deepContentScan: scanningOptions.deepDomScan,
             normalizeCssZoom: scanningOptions.normalizeCssZoom,
             selectText: false,
             delay: scanningOptions.delay,
-            touchInputEnabled: false,
-            pointerEventsEnabled: false,
             scanLength: scanningOptions.length,
             layoutAwareScan: scanningOptions.layoutAwareScan,
             preventMiddleMouse: false,
             sentenceParsingOptions,
-            scanAltText: scanningOptions.scanAltText,
         });
 
         this._contentTextScanner.setEnabled(true);
@@ -2176,5 +2277,14 @@ export class Display extends EventDispatcher {
     /** */
     _triggerContentUpdateComplete() {
         this.trigger('contentUpdateComplete', {type: this._contentType});
+    }
+
+    /**
+     * @param {import('settings').ProfileOptions} options
+     */
+    _setStickyHeader(options) {
+        if (this._searchHeader && options) {
+            this._searchHeader.classList.toggle('sticky-header', options.general.stickySearchHeader);
+        }
     }
 }

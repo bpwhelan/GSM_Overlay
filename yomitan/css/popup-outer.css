@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2016-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -34,6 +34,9 @@ iframe.yomitan-popup[data-theme=dark] {
 }
 iframe.yomitan-popup[data-outer-theme=dark] {
     box-shadow: 0 0 10em rgba(255, 255, 255, 0.5);
+}
+iframe.yomitan-popup[data-outer-theme=none] {
+    box-shadow: none;
 }
 iframe.yomitan-popup[data-popup-display-mode=full-width] {
     border-left: none;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2019-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -188,7 +188,7 @@ export class PopupFactory {
             promises.push(promise);
         }
 
-        /** @type {undefined|unknown} */
+        /** @type {undefined|Error} */
         let error = void 0;
         /** @type {{popup: import('popup').PopupAny, token: string}[]} */
         const results = [];

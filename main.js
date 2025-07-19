@@ -101,7 +101,7 @@ win.on('focus', () => {
 
   ipcMain.on("open-yomitan-settings", () => {
     const yomitanOptionsWin = new BrowserWindow({
-      width: 800,
+      width: 1100,
       height: 600,
       webPreferences: {
         nodeIntegration: false

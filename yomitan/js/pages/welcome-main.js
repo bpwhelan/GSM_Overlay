@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2019-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,10 +20,13 @@ import {Application} from '../application.js';
 import {DocumentFocusController} from '../dom/document-focus-controller.js';
 import {querySelectorNotNull} from '../dom/query-selector.js';
 import {ExtensionContentController} from './common/extension-content-controller.js';
+import {DictionaryController} from './settings/dictionary-controller.js';
+import {DictionaryImportController} from './settings/dictionary-import-controller.js';
 import {GenericSettingController} from './settings/generic-setting-controller.js';
 import {LanguagesController} from './settings/languages-controller.js';
 import {ModalController} from './settings/modal-controller.js';
 import {RecommendedPermissionsController} from './settings/recommended-permissions-controller.js';
+import {RecommendedSettingsController} from './settings/recommended-settings-controller.js';
 import {ScanInputsSimpleController} from './settings/scan-inputs-simple-controller.js';
 import {SettingsController} from './settings/settings-controller.js';
 import {SettingsDisplayController} from './settings/settings-display-controller.js';
@@ -58,8 +61,8 @@ async function checkNeedsCustomTemplatesWarning() {
 }
 
 await Application.main(true, async (application) => {
-    const modalController = new ModalController();
-    modalController.prepare();
+    const modalController = new ModalController(['shared-modals']);
+    await modalController.prepare();
 
     const settingsController = new SettingsController(application);
     await settingsController.prepare();
@@ -88,6 +91,12 @@ await Application.main(true, async (application) => {
     const genericSettingController = new GenericSettingController(settingsController);
     preparePromises.push(setupGenericSettingsController(genericSettingController));
 
+    const dictionaryController = new DictionaryController(settingsController, modalController, statusFooter);
+    preparePromises.push(dictionaryController.prepare());
+
+    const dictionaryImportController = new DictionaryImportController(settingsController, modalController, statusFooter);
+    preparePromises.push(dictionaryImportController.prepare());
+
     const simpleScanningInputController = new ScanInputsSimpleController(settingsController);
     preparePromises.push(simpleScanningInputController.prepare());
 
@@ -96,6 +105,9 @@ await Application.main(true, async (application) => {
 
     const languagesController = new LanguagesController(settingsController);
     preparePromises.push(languagesController.prepare());
+
+    const recommendedSettingsController = new RecommendedSettingsController(settingsController);
+    preparePromises.push(recommendedSettingsController.prepare());
 
     await Promise.all(preparePromises);
 

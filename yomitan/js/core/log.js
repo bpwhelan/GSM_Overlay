@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2019-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -29,7 +29,7 @@ class Logger extends EventDispatcher {
         /** @type {string} */
         this._extensionName = 'Extension';
         /** @type {?string} */
-        this._issueUrl = 'https://github.com/themoeway/yomitan/issues';
+        this._issueUrl = 'https://github.com/yomidevs/yomitan/issues';
     }
 
     /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2019-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -19,6 +19,9 @@
 import {Application} from '../application.js';
 import {DocumentFocusController} from '../dom/document-focus-controller.js';
 import {HotkeyHandler} from '../input/hotkey-handler.js';
+import {ModalController} from '../pages/settings/modal-controller.js';
+import {SettingsController} from '../pages/settings/settings-controller.js';
+import {SettingsDisplayController} from '../pages/settings/settings-display-controller.js';
 import {DisplayAnki} from './display-anki.js';
 import {DisplayAudio} from './display-audio.js';
 import {Display} from './display.js';
@@ -51,7 +54,18 @@ await Application.main(true, async (application) => {
     const searchDisplayController = new SearchDisplayController(display, displayAudio, searchPersistentStateController);
     await searchDisplayController.prepare();
 
+    const modalController = new ModalController([]);
+    await modalController.prepare();
+
+    const settingsController = new SettingsController(application);
+    await settingsController.prepare();
+
+    const settingsDisplayController = new SettingsDisplayController(settingsController, modalController);
+    await settingsDisplayController.prepare();
+
     document.body.hidden = false;
+
+    documentFocusController.focusElement();
 
     display.initializeState();
 

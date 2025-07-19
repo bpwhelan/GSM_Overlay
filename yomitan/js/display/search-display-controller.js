@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2016-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,11 +16,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import * as wanakana from '../../lib/wanakana.js';
 import {ClipboardMonitor} from '../comm/clipboard-monitor.js';
 import {createApiMap, invokeApiMapHandler} from '../core/api-map.js';
 import {EventListenerCollection} from '../core/event-listener-collection.js';
 import {querySelectorNotNull} from '../dom/query-selector.js';
+import {isComposing} from '../language/ime-utilities.js';
+import {convertToKana, convertToKanaIME} from '../language/ja/japanese-wanakana.js';
 
 export class SearchDisplayController {
     /**
@@ -38,6 +39,8 @@ export class SearchDisplayController {
         /** @type {HTMLButtonElement} */
         this._searchButton = querySelectorNotNull(document, '#search-button');
         /** @type {HTMLButtonElement} */
+        this._clearButton = querySelectorNotNull(document, '#clear-button');
+        /** @type {HTMLButtonElement} */
         this._searchBackButton = querySelectorNotNull(document, '#search-back-button');
         /** @type {HTMLTextAreaElement} */
         this._queryInput = querySelectorNotNull(document, '#search-textbox');
@@ -47,6 +50,10 @@ export class SearchDisplayController {
         this._clipboardMonitorEnableCheckbox = querySelectorNotNull(document, '#clipboard-monitor-enable');
         /** @type {HTMLInputElement} */
         this._wanakanaEnableCheckbox = querySelectorNotNull(document, '#wanakana-enable');
+        /** @type {HTMLInputElement} */
+        this._stickyHeaderEnableCheckbox = querySelectorNotNull(document, '#sticky-header-enable');
+        /** @type {HTMLElement} */
+        this._profileSelectContainer = querySelectorNotNull(document, '#search-option-profile-select');
         /** @type {HTMLSelectElement} */
         this._profileSelect = querySelectorNotNull(document, '#profile-select');
         /** @type {HTMLElement} */
@@ -57,8 +64,6 @@ export class SearchDisplayController {
         this._queryInputEventsSetup = false;
         /** @type {boolean} */
         this._wanakanaEnabled = false;
-        /** @type {boolean} */
-        this._wanakanaBound = false;
         /** @type {boolean} */
         this._introVisible = true;
         /** @type {?import('core').Timeout} */
@@ -102,12 +107,18 @@ export class SearchDisplayController {
         this._display.setHistorySettings({useBrowserHistory: true});
 
         this._searchButton.addEventListener('click', this._onSearch.bind(this), false);
+        this._clearButton.addEventListener('click', this._onClear.bind(this), false);
+
         this._searchBackButton.addEventListener('click', this._onSearchBackButtonClick.bind(this), false);
         this._wanakanaEnableCheckbox.addEventListener('change', this._onWanakanaEnableChange.bind(this));
         window.addEventListener('copy', this._onCopy.bind(this));
+        window.addEventListener('paste', this._onPaste.bind(this));
         this._clipboardMonitor.on('change', this._onClipboardMonitorChange.bind(this));
         this._clipboardMonitorEnableCheckbox.addEventListener('change', this._onClipboardMonitorEnableChange.bind(this));
+        this._stickyHeaderEnableCheckbox.addEventListener('change', this._onStickyHeaderEnableChange.bind(this));
         this._display.hotkeyHandler.on('keydownNonHotkey', this._onKeyDown.bind(this));
+
+        this._profileSelect.addEventListener('change', this._onProfileSelectChange.bind(this), false);
 
         const displayOptions = this._display.getOptions();
         if (displayOptions !== null) {
@@ -182,7 +193,7 @@ export class SearchDisplayController {
     async _onDisplayOptionsUpdated({options}) {
         this._clipboardMonitorEnabled = options.clipboard.enableSearchPageMonitor;
         this._updateClipboardMonitorEnabled();
-        this._updateWanakanaCheckbox(options);
+        this._updateSearchSettings(options);
         this._queryInput.lang = options.general.language;
         await this._updateProfileSelect();
     }
@@ -190,12 +201,13 @@ export class SearchDisplayController {
     /**
      * @param {import('settings').ProfileOptions} options
      */
-    _updateWanakanaCheckbox(options) {
-        const {language, enableWanakana} = options.general;
+    _updateSearchSettings(options) {
+        const {language, enableWanakana, stickySearchHeader} = options.general;
         const wanakanaEnabled = language === 'ja' && enableWanakana;
         this._wanakanaEnableCheckbox.checked = wanakanaEnabled;
         this._wanakanaSearchOption.style.display = language === 'ja' ? '' : 'none';
         this._setWanakanaEnabled(wanakanaEnabled);
+        this._setStickyHeaderEnabled(stickySearchHeader);
     }
 
     /**
@@ -228,24 +240,46 @@ export class SearchDisplayController {
         this._searchBackButton.hidden = !showBackButton;
 
         if (this._queryInput.value !== query) {
-            this._queryInput.value = query;
+            this._queryInput.value = query.trimEnd();
             this._updateSearchHeight(true);
         }
         this._setIntroVisible(!valid, animate);
     }
 
-    /** */
-    _onSearchInput() {
+    /**
+     * @param {InputEvent} e
+     */
+    _onSearchInput(e) {
         this._updateSearchHeight(true);
+
+        const element = /** @type {HTMLTextAreaElement} */ (e.currentTarget);
+        if (this._wanakanaEnabled) {
+            this._searchTextKanaConversion(element, e);
+        }
+    }
+
+    /**
+     * @param {HTMLTextAreaElement} element
+     * @param {InputEvent} event
+     */
+    _searchTextKanaConversion(element, event) {
+        const platform = document.documentElement.dataset.platform ?? 'unknown';
+        const browser = document.documentElement.dataset.browser ?? 'unknown';
+        if (isComposing(event, platform, browser)) { return; }
+        const {kanaString, newSelectionStart} = convertToKanaIME(element.value, element.selectionStart);
+        element.value = kanaString;
+        element.setSelectionRange(newSelectionStart, newSelectionStart);
     }
 
     /**
      * @param {KeyboardEvent} e
      */
     _onSearchKeydown(e) {
-        if (e.isComposing) { return; }
-        const {code} = e;
-        if (!((code === 'Enter' || code === 'NumpadEnter') && !e.shiftKey)) { return; }
+        // Keycode 229 is a special value for events processed by the IME.
+        // https://developer.mozilla.org/en-US/docs/Web/API/Element/keydown_event#keydown_events_with_ime
+        if (e.isComposing || e.keyCode === 229) { return; }
+        const {code, key} = e;
+        if (!((code === 'Enter' || key === 'Enter' || code === 'NumpadEnter') && !e.shiftKey)) { return; }
 
         // Search
         const element = /** @type {HTMLElement} */ (e.currentTarget);
@@ -263,6 +297,16 @@ export class SearchDisplayController {
         this._search(true, 'new', true, null);
     }
 
+    /**
+     * @param {MouseEvent} e
+     */
+    _onClear(e) {
+        e.preventDefault();
+        this._queryInput.value = '';
+        this._queryInput.focus();
+        this._updateSearchHeight(true);
+    }
+
     /** */
     _onSearchBackButtonClick() {
         this._display.history.back();
@@ -272,6 +316,26 @@ export class SearchDisplayController {
     async _onCopy() {
         // Ignore copy from search page
         this._clipboardMonitor.setPreviousText(document.hasFocus() ? await this._clipboardReaderLike.getText(false) : '');
+    }
+
+    /**
+     * @param {ClipboardEvent} e
+     */
+    _onPaste(e) {
+        if (e.target === this._queryInput) {
+            return;
+        }
+        e.stopPropagation();
+        e.preventDefault();
+        const text = e.clipboardData?.getData('text');
+        if (!text) {
+            return;
+        }
+        if (this._queryInput.value !== text) {
+            this._queryInput.value = text;
+            this._updateSearchHeight(true);
+            this._search(true, 'new', true, null);
+        }
     }
 
     /** @type {import('application').ApiHandler<'searchDisplayControllerUpdateSearchQuery'>} */
@@ -331,6 +395,31 @@ export class SearchDisplayController {
         void this._setClipboardMonitorEnabled(enabled);
     }
 
+    /**
+     * @param {Event} e
+     */
+    _onStickyHeaderEnableChange(e) {
+        const element = /** @type {HTMLInputElement} */ (e.target);
+        const value = element.checked;
+        this._setStickyHeaderEnabled(value);
+        /** @type {import('settings-modifications').ScopedModificationSet} */
+        const modification = {
+            action: 'set',
+            path: 'general.stickySearchHeader',
+            value,
+            scope: 'profile',
+            optionsContext: this._display.getOptionsContext(),
+        };
+        void this._display.application.api.modifySettings([modification], 'search');
+    }
+
+    /**
+     * @param {boolean} stickySearchHeaderEnabled
+     */
+    _setStickyHeaderEnabled(stickySearchHeaderEnabled) {
+        this._stickyHeaderEnableCheckbox.checked = stickySearchHeaderEnabled;
+    }
+
     /** */
     _onModeChange() {
         this._updateClipboardMonitorEnabled();
@@ -344,14 +433,14 @@ export class SearchDisplayController {
         const value = Number.parseInt(node.value, 10);
         const optionsFull = await this._display.application.api.optionsGetFull();
         if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= optionsFull.profiles.length) {
-            await this._setPrimaryProfileIndex(value);
+            await this._setDefaultProfileIndex(value);
         }
     }
 
     /**
      * @param {number} value
      */
-    async _setPrimaryProfileIndex(value) {
+    async _setDefaultProfileIndex(value) {
         /** @type {import('settings-modifications').ScopedModificationSet} */
         const modification = {
             action: 'set',
@@ -374,17 +463,6 @@ export class SearchDisplayController {
         this._queryInputEvents.addEventListener(input, 'keydown', this._onSearchKeydown.bind(this), false);
 
         this._wanakanaEnabled = enabled;
-        if (enabled) {
-            if (!this._wanakanaBound) {
-                wanakana.bind(input);
-                this._wanakanaBound = true;
-            }
-        } else {
-            if (this._wanakanaBound) {
-                wanakana.unbind(input);
-                this._wanakanaBound = false;
-            }
-        }
 
         this._queryInputEvents.addEventListener(input, 'input', this._onSearchInput.bind(this), false);
         this._queryInputEventsSetup = true;
@@ -528,6 +606,8 @@ export class SearchDisplayController {
      * @param {?import('settings').OptionsContextFlag[]} flags
      */
     _search(animate, historyMode, lookup, flags) {
+        this._updateSearchText();
+
         const query = this._queryInput.value;
         const depth = this._display.depth;
         const url = window.location.href;
@@ -567,7 +647,7 @@ export class SearchDisplayController {
      */
     _updateSearchHeight(shrink) {
         const searchTextbox = this._queryInput;
-        const searchItems = [this._queryInput, this._searchButton, this._searchBackButton];
+        const searchItems = [this._queryInput, this._searchButton, this._searchBackButton, this._clearButton];
 
         if (shrink) {
             for (const searchButton of searchItems) {
@@ -581,6 +661,15 @@ export class SearchDisplayController {
                 searchButton.style.height = `${scrollHeight}px`;
             }
         }
+    }
+
+    /** */
+    _updateSearchText() {
+        if (this._wanakanaEnabled) {
+            // don't use convertToKanaIME since user searching has finalized the text and is no longer composing
+            this._queryInput.value = convertToKana(this._queryInput.value);
+        }
+        this._queryInput.setSelectionRange(this._queryInput.value.length, this._queryInput.value.length);
     }
 
     /**
@@ -609,6 +698,8 @@ export class SearchDisplayController {
             optionGroup.removeChild(optionGroup.firstChild);
         }
 
+        this._profileSelectContainer.hidden = profiles.length <= 1;
+
         const fragment = document.createDocumentFragment();
         for (let i = 0, ii = profiles.length; i < ii; ++i) {
             const {name} = profiles[i];
@@ -620,7 +711,5 @@ export class SearchDisplayController {
         optionGroup.textContent = '';
         optionGroup.appendChild(fragment);
         this._profileSelect.value = `${profileCurrent}`;
-
-        this._profileSelect.addEventListener('change', this._onProfileSelectChange.bind(this), false);
     }
 }

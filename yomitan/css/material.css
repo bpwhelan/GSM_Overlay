@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2020-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -278,6 +278,7 @@ body {
 .icon[data-icon=clipboard]               { --icon-image: url(/images/clipboard.svg); }
 .icon[data-icon=key]                     { --icon-image: url(/images/key.svg); }
 .icon[data-icon=tag]                     { --icon-image: url(/images/tag.svg); }
+.icon[data-icon=flag]                    { --icon-image: url(/images/flag.svg); }
 .icon[data-icon=accessibility]           { --icon-image: url(/images/accessibility.svg); }
 .icon[data-icon=connection]              { --icon-image: url(/images/connection.svg); }
 .icon[data-icon=external-link]           { --icon-image: url(/images/external-link.svg); }
@@ -1241,7 +1242,7 @@ button.icon-button>.icon-button-inner {
     top: 0;
     right: 0;
     bottom: 0;
-    z-index: 101;
+    z-index: 1001;
     outline: none;
     overflow: hidden;
 }

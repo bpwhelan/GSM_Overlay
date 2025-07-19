@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2019-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 
 /**
  * Converts any string into a form that can be passed into the RegExp constructor.
@@ -242,6 +243,7 @@ export function deferPromise() {
     let resolve;
     /** @type {((reason?: import('core').RejectionReason) => void)|undefined} */
     let reject;
+    /** @type {Promise<T>} */
     const promise = new Promise((resolve2, reject2) => {
         resolve = resolve2;
         reject = reject2;
@@ -260,4 +262,23 @@ export function deferPromise() {
  */
 export function promiseTimeout(delay) {
     return delay <= 0 ? Promise.resolve() : new Promise((resolve) => { setTimeout(resolve, delay); });
+}
+
+/**
+ * @param {string} css
+ * @returns {string}
+ */
+export function sanitizeCSS(css) {
+    const sanitizer = new CSSStyleSheet();
+    sanitizer.replaceSync(css);
+    return [...sanitizer.cssRules].map((rule) => rule.cssText || '').join('\n');
+}
+
+/**
+ * @param {string} css
+ * @param {string} scopeSelector
+ * @returns {string}
+ */
+export function addScopeToCss(css, scopeSelector) {
+    return scopeSelector + ' {' + css + '\n}';
 }

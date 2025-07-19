@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2024  Yomitan Authors
+ * Copyright (C) 2023-2025  Yomitan Authors
  * Copyright (C) 2016-2022  Yomichan Authors
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,11 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import {safePerformance} from '../core/safe-performance.js';
 import {applyTextReplacement} from '../general/regex-util.js';
 import {isCodePointJapanese} from './ja/japanese.js';
 import {LanguageTransformer} from './language-transformer.js';
 import {getAllLanguageReadingNormalizers, getAllLanguageTextProcessors} from './languages.js';
 import {MultiLanguageTransformer} from './multi-language-transformer.js';
+import {isCodePointChinese} from './zh/chinese.js';
 
 /**
  * Class which finds term and kanji dictionary entries for text.
@@ -75,13 +77,14 @@ export class Translator {
      * @returns {Promise<{dictionaryEntries: import('dictionary').TermDictionaryEntry[], originalTextLength: number}>} An object containing dictionary entries and the length of the original source text.
      */
     async findTerms(mode, text, options) {
-        const {enabledDictionaryMap, excludeDictionaryDefinitions, sortFrequencyDictionary, sortFrequencyDictionaryOrder, language} = options;
+        safePerformance.mark('translator:findTerms:start');
+        const {enabledDictionaryMap, excludeDictionaryDefinitions, sortFrequencyDictionary, sortFrequencyDictionaryOrder, language, primaryReading} = options;
         const tagAggregator = new TranslatorTagAggregator();
-        let {dictionaryEntries, originalTextLength} = await this._findTermsInternal(text, options, tagAggregator);
+        let {dictionaryEntries, originalTextLength} = await this._findTermsInternal(text, options, tagAggregator, primaryReading);
 
         switch (mode) {
             case 'group':
-                dictionaryEntries = this._groupDictionaryEntriesByHeadword(language, dictionaryEntries, tagAggregator);
+                dictionaryEntries = this._groupDictionaryEntriesByHeadword(language, dictionaryEntries, tagAggregator, primaryReading);
                 break;
             case 'merge':
                 dictionaryEntries = await this._getRelatedDictionaryEntries(dictionaryEntries, options, tagAggregator);
@@ -119,8 +122,9 @@ export class Translator {
             if (frequencies.length > 1) { this._sortTermDictionaryEntrySimpleData(frequencies); }
             if (pronunciations.length > 1) { this._sortTermDictionaryEntrySimpleData(pronunciations); }
         }
-
         const withUserFacingInflections = this._addUserFacingInflections(language, dictionaryEntries);
+        safePerformance.mark('translator:findTerms:end');
+        safePerformance.measure('translator:findTerms', 'translator:findTerms:start', 'translator:findTerms:end');
 
         return {dictionaryEntries: withUserFacingInflections, originalTextLength};
     }
@@ -135,7 +139,7 @@ export class Translator {
      */
     async findKanji(text, options) {
         if (options.removeNonJapaneseCharacters) {
-            text = this._getJapaneseOnlyText(text);
+            text = this._getJapaneseChineseOnlyText(text);
         }
         const {enabledDictionaryMap} = options;
         /** @type {Set<string>} */
@@ -154,9 +158,14 @@ export class Translator {
         const tagAggregator = new TranslatorTagAggregator();
         for (const {character, onyomi, kunyomi, tags, definitions, stats, dictionary} of databaseEntries) {
             const expandedStats = await this._expandKanjiStats(stats, dictionary);
-            const dictionaryEntry = this._createKanjiDictionaryEntry(character, dictionary, onyomi, kunyomi, expandedStats, definitions);
+            const dictionaryAlias = this._getDictionaryAlias(dictionary, enabledDictionaryMap);
+            const dictionaryEntry = this._createKanjiDictionaryEntry(character, dictionary, dictionaryAlias, onyomi, kunyomi, expandedStats, definitions, enabledDictionaryMap);
             dictionaryEntries.push(dictionaryEntry);
             tagAggregator.addTags(dictionaryEntry.tags, dictionary, tags);
+        }
+
+        if (dictionaryEntries.length > 1) {
+            this._sortKanjiDictionaryEntries(dictionaryEntries);
         }
 
         await this._addKanjiMeta(dictionaryEntries, enabledDictionaryMap);
@@ -215,12 +224,13 @@ export class Translator {
      * @param {string} text
      * @param {import('translation').FindTermsOptions} options
      * @param {TranslatorTagAggregator} tagAggregator
+     * @param {string} primaryReading
      * @returns {Promise<{dictionaryEntries: import('translation-internal').TermDictionaryEntry[], originalTextLength: number}>}
      */
-    async _findTermsInternal(text, options, tagAggregator) {
+    async _findTermsInternal(text, options, tagAggregator, primaryReading) {
         const {removeNonJapaneseCharacters, enabledDictionaryMap} = options;
-        if (removeNonJapaneseCharacters && options.language === 'ja') {
-            text = this._getJapaneseOnlyText(text);
+        if (removeNonJapaneseCharacters && (['ja', 'zh', 'yue'].includes(options.language))) {
+            text = this._getJapaneseChineseOnlyText(text);
         }
         if (text.length === 0) {
             return {dictionaryEntries: [], originalTextLength: 0};
@@ -228,21 +238,22 @@ export class Translator {
 
         const deinflections = await this._getDeinflections(text, options);
 
-        return this._getDictionaryEntries(deinflections, enabledDictionaryMap, tagAggregator);
+        return this._getDictionaryEntries(deinflections, enabledDictionaryMap, tagAggregator, primaryReading);
     }
 
     /**
      * @param {import('translation-internal').DatabaseDeinflection[]} deinflections
      * @param {import('translation').TermEnabledDictionaryMap} enabledDictionaryMap
      * @param {TranslatorTagAggregator} tagAggregator
+     * @param {string} primaryReading
      * @returns {{dictionaryEntries: import('translation-internal').TermDictionaryEntry[], originalTextLength: number}}
      */
-    _getDictionaryEntries(deinflections, enabledDictionaryMap, tagAggregator) {
+    _getDictionaryEntries(deinflections, enabledDictionaryMap, tagAggregator, primaryReading) {
         let originalTextLength = 0;
         /** @type {import('translation-internal').TermDictionaryEntry[]} */
         const dictionaryEntries = [];
         const ids = new Set();
-        for (const {databaseEntries, originalText, transformedText, deinflectedText, inflectionRuleChainCandidates} of deinflections) {
+        for (const {databaseEntries, originalText, transformedText, deinflectedText, textProcessorRuleChainCandidates, inflectionRuleChainCandidates} of deinflections) {
             if (databaseEntries.length === 0) { continue; }
             originalTextLength = Math.max(originalTextLength, originalText.length);
             for (const databaseEntry of databaseEntries) {
@@ -259,12 +270,13 @@ export class Translator {
                         continue;
                     }
                     if (transformedText.length > existingTransformedLength) {
-                        dictionaryEntries.splice(existingIndex, 1, this._createTermDictionaryEntryFromDatabaseEntry(databaseEntry, originalText, transformedText, deinflectedText, inflectionRuleChainCandidates, true, enabledDictionaryMap, tagAggregator));
+                        dictionaryEntries.splice(existingIndex, 1, this._createTermDictionaryEntryFromDatabaseEntry(databaseEntry, originalText, transformedText, deinflectedText, textProcessorRuleChainCandidates, inflectionRuleChainCandidates, true, enabledDictionaryMap, tagAggregator, primaryReading));
                     } else {
                         this._mergeInflectionRuleChains(existingEntry, inflectionRuleChainCandidates);
+                        this._mergeTextProcessorRuleChains(existingEntry, textProcessorRuleChainCandidates);
                     }
                 } else {
-                    const dictionaryEntry = this._createTermDictionaryEntryFromDatabaseEntry(databaseEntry, originalText, transformedText, deinflectedText, inflectionRuleChainCandidates, true, enabledDictionaryMap, tagAggregator);
+                    const dictionaryEntry = this._createTermDictionaryEntryFromDatabaseEntry(databaseEntry, originalText, transformedText, deinflectedText, textProcessorRuleChainCandidates, inflectionRuleChainCandidates, true, enabledDictionaryMap, tagAggregator, primaryReading);
                     dictionaryEntries.push(dictionaryEntry);
                     ids.add(id);
                 }
@@ -289,6 +301,23 @@ export class Translator {
             }
         }
         return null;
+    }
+
+    /**
+     * @param {import('translation-internal').TermDictionaryEntry} existingEntry
+     * @param {import('translation-internal').TextProcessorRuleChainCandidate[]} textProcessorRuleChainCandidates
+     */
+    _mergeTextProcessorRuleChains(existingEntry, textProcessorRuleChainCandidates) {
+        const existingChains = existingEntry.textProcessorRuleChainCandidates;
+
+        for (const textProcessorRules of textProcessorRuleChainCandidates) {
+            const duplicate = existingChains.find((existingChain) => {
+                return this._areArraysEqualIgnoreOrder(existingChain, textProcessorRules);
+            });
+            if (!duplicate) {
+                existingEntry.textProcessorRuleChainCandidates.push(textProcessorRules);
+            }
+        }
     }
 
     /**
@@ -345,10 +374,11 @@ export class Translator {
      * @returns {Promise<import('translation-internal').DatabaseDeinflection[]>}
      */
     async _getDeinflections(text, options) {
+        safePerformance.mark('translator:getDeinflections:start');
         let deinflections = (
             options.deinflect ?
-            this._getAlgorithmDeinflections(text, options) :
-            [this._createDeinflection(text, text, text, 0, [])]
+                this._getAlgorithmDeinflections(text, options) :
+                [this._createDeinflection(text, text, text, 0, [], [])]
         );
         if (deinflections.length === 0) { return []; }
 
@@ -367,6 +397,8 @@ export class Translator {
         }
         deinflections = deinflections.filter((deinflection) => deinflection.databaseEntries.length);
 
+        safePerformance.mark('translator:getDeinflections:end');
+        safePerformance.measure('translator:getDeinflections', 'translator:getDeinflections:start', 'translator:getDeinflections:end');
         return deinflections;
     }
 
@@ -378,10 +410,11 @@ export class Translator {
      * @returns {Promise<import('translation-internal').DatabaseDeinflection[]>}
      */
     async _getDictionaryDeinflections(language, deinflections, enabledDictionaryMap, matchType) {
+        safePerformance.mark('translator:getDictionaryDeinflections:start');
         /** @type {import('translation-internal').DatabaseDeinflection[]} */
         const dictionaryDeinflections = [];
         for (const deinflection of deinflections) {
-            const {originalText, transformedText, inflectionRuleChainCandidates: algorithmChains, databaseEntries} = deinflection;
+            const {originalText, transformedText, textProcessorRuleChainCandidates, inflectionRuleChainCandidates: algorithmChains, databaseEntries} = deinflection;
             for (const entry of databaseEntries) {
                 const {dictionary, definitions} = entry;
                 const entryDictionary = enabledDictionaryMap.get(dictionary);
@@ -399,7 +432,7 @@ export class Translator {
                             };
                         });
 
-                        const dictionaryDeinflection = this._createDeinflection(originalText, transformedText, formOf, 0, inflectionRuleChainCandidates);
+                        const dictionaryDeinflection = this._createDeinflection(originalText, transformedText, formOf, 0, textProcessorRuleChainCandidates, inflectionRuleChainCandidates);
                         dictionaryDeinflections.push(dictionaryDeinflection);
                     }
                 }
@@ -408,6 +441,8 @@ export class Translator {
 
         await this._addEntriesToDeinflections(language, dictionaryDeinflections, enabledDictionaryMap, matchType);
 
+        safePerformance.mark('translator:getDictionaryDeinflections:end');
+        safePerformance.measure('translator:getDictionaryDeinflections', 'translator:getDictionaryDeinflections:start', 'translator:getDictionaryDeinflections:end');
         return dictionaryDeinflections;
     }
 
@@ -491,17 +526,24 @@ export class Translator {
         ) {
             const preprocessedTextVariants = this._getTextVariants(rawSource, textPreprocessors, this._getTextReplacementsVariants(options), sourceCache);
 
-            for (const source of preprocessedTextVariants) {
+            for (const [source, preprocessorRuleChainCandidates] of preprocessedTextVariants) {
                 for (const deinflection of this._multiLanguageTransformer.transform(language, source)) {
                     const {trace, conditions} = deinflection;
                     const postprocessedTextVariants = this._getTextVariants(deinflection.text, textPostprocessors, [null], sourceCache);
-                    for (const transformedText of postprocessedTextVariants) {
+                    for (const [transformedText, postprocessorRuleChainCandidates] of postprocessedTextVariants) {
                         /** @type {import('translation-internal').InflectionRuleChainCandidate} */
                         const inflectionRuleChainCandidate = {
                             source: 'algorithm',
                             inflectionRules: trace.map((frame) => frame.transform),
                         };
-                        deinflections.push(this._createDeinflection(rawSource, source, transformedText, conditions, [inflectionRuleChainCandidate]));
+
+                        // Every combination of preprocessor rule candidates and postprocessor rule candidates
+                        const textProcessorRuleChainCandidates = preprocessorRuleChainCandidates.flatMap(
+                            (preprocessorRuleChainCandidate) => postprocessorRuleChainCandidates.map(
+                                (postprocessorRuleChainCandidate) => [...preprocessorRuleChainCandidate, ...postprocessorRuleChainCandidate],
+                            ),
+                        );
+                        deinflections.push(this._createDeinflection(rawSource, source, transformedText, conditions, textProcessorRuleChainCandidates, [inflectionRuleChainCandidate]));
                     }
                 }
             }
@@ -514,26 +556,43 @@ export class Translator {
      * @param {import('language').TextProcessorWithId<unknown>[]} textProcessors
      * @param {(import('translation').FindTermsTextReplacement[] | null)[]} textReplacements
      * @param {import('translation-internal').TextCache} textCache
-     * @returns {Set<string>}
+     * @returns {import('translation-internal').VariantAndTextProcessorRuleChainCandidatesMap}
      */
     _getTextVariants(text, textProcessors, textReplacements, textCache) {
-        let variants = new Set([text]);
-        for (const textReplacement of textReplacements) {
+        /** @type {import('translation-internal').VariantAndTextProcessorRuleChainCandidatesMap} */
+        let variantsMap = new Map([
+            [text, [[]]],
+        ]);
+
+        for (const [id, textReplacement] of textReplacements.entries()) {
             if (textReplacement === null) { continue; }
-            variants.add(this._applyTextReplacements(text, textReplacement));
+            variantsMap.set(this._applyTextReplacements(text, textReplacement), [['Text Replacement' + ' ' + id]]);
         }
         for (const {id, textProcessor: {process, options}} of textProcessors) {
-            /** @type {Set<string>} */
-            const newVariants = new Set();
-            for (const variant of variants) {
+            /** @type {import('translation-internal').VariantAndTextProcessorRuleChainCandidatesMap} */
+            const newVariantsMap = new Map();
+            for (const [variant, currentPreprocessorRuleChainCandidates] of variantsMap) {
                 for (const option of options) {
                     const processed = this._getProcessedText(textCache, variant, id, option, process);
-                    newVariants.add(processed);
+                    const existingCandidates = newVariantsMap.get(processed);
+
+                    // Ignore if applying the textProcessor doesn't change the source
+                    if (processed === variant) {
+                        if (typeof existingCandidates === 'undefined') {
+                            newVariantsMap.set(processed, currentPreprocessorRuleChainCandidates);
+                        } else {
+                            newVariantsMap.set(processed, existingCandidates);
+                        }
+                    } else if (typeof existingCandidates === 'undefined') {
+                        newVariantsMap.set(processed, currentPreprocessorRuleChainCandidates.map((candidate) => [...candidate, id]));
+                    } else {
+                        newVariantsMap.set(processed, [...existingCandidates, ...currentPreprocessorRuleChainCandidates.map((candidate) => [...candidate, id])]);
+                    }
                 }
             }
-            variants = newVariants;
+            variantsMap = newVariantsMap;
         }
-        return variants;
+        return variantsMap;
     }
 
     /**
@@ -594,10 +653,11 @@ export class Translator {
      * @param {string} text
      * @returns {string}
      */
-    _getJapaneseOnlyText(text) {
+    _getJapaneseChineseOnlyText(text) {
         let length = 0;
         for (const c of text) {
-            if (!isCodePointJapanese(/** @type {number} */ (c.codePointAt(0)))) {
+            const codePoint = /** @type {number} */ (c.codePointAt(0));
+            if (!isCodePointJapanese(codePoint) && !isCodePointChinese(codePoint)) {
                 return text.substring(0, length);
             }
             length += c.length;
@@ -618,11 +678,12 @@ export class Translator {
      * @param {string} transformedText
      * @param {string} deinflectedText
      * @param {number} conditions
+     * @param {import('translation-internal').TextProcessorRuleChainCandidate[]} textProcessorRuleChainCandidates
      * @param {import('translation-internal').InflectionRuleChainCandidate[]} inflectionRuleChainCandidates
      * @returns {import('translation-internal').DatabaseDeinflection}
      */
-    _createDeinflection(originalText, transformedText, deinflectedText, conditions, inflectionRuleChainCandidates) {
-        return {originalText, transformedText, deinflectedText, conditions, inflectionRuleChainCandidates, databaseEntries: []};
+    _createDeinflection(originalText, transformedText, deinflectedText, conditions, textProcessorRuleChainCandidates, inflectionRuleChainCandidates) {
+        return {originalText, transformedText, deinflectedText, conditions, textProcessorRuleChainCandidates, inflectionRuleChainCandidates, databaseEntries: []};
     }
 
     // Term dictionary entry grouping
@@ -634,7 +695,7 @@ export class Translator {
      * @returns {Promise<import('translation-internal').TermDictionaryEntry[]>}
      */
     async _getRelatedDictionaryEntries(dictionaryEntries, options, tagAggregator) {
-        const {mainDictionary, enabledDictionaryMap, language} = options;
+        const {mainDictionary, enabledDictionaryMap, language, primaryReading} = options;
         /** @type {import('translator').SequenceQuery[]} */
         const sequenceList = [];
         /** @type {import('translation-internal').DictionaryEntryGroup[]} */
@@ -665,20 +726,20 @@ export class Translator {
 
         if (sequenceList.length > 0) {
             const secondarySearchDictionaryMap = this._getSecondarySearchDictionaryMap(enabledDictionaryMap);
-            await this._addRelatedDictionaryEntries(groupedDictionaryEntries, ungroupedDictionaryEntriesMap, sequenceList, enabledDictionaryMap, tagAggregator);
+            await this._addRelatedDictionaryEntries(groupedDictionaryEntries, ungroupedDictionaryEntriesMap, sequenceList, enabledDictionaryMap, tagAggregator, primaryReading);
             for (const group of groupedDictionaryEntries) {
                 this._sortTermDictionaryEntriesById(group.dictionaryEntries);
             }
             if (ungroupedDictionaryEntriesMap.size > 0 || secondarySearchDictionaryMap.size > 0) {
-                await this._addSecondaryRelatedDictionaryEntries(language, groupedDictionaryEntries, ungroupedDictionaryEntriesMap, enabledDictionaryMap, secondarySearchDictionaryMap, tagAggregator);
+                await this._addSecondaryRelatedDictionaryEntries(language, groupedDictionaryEntries, ungroupedDictionaryEntriesMap, enabledDictionaryMap, secondarySearchDictionaryMap, tagAggregator, primaryReading);
             }
         }
 
         const newDictionaryEntries = [];
         for (const group of groupedDictionaryEntries) {
-            newDictionaryEntries.push(this._createGroupedDictionaryEntry(language, group.dictionaryEntries, true, tagAggregator));
+            newDictionaryEntries.push(this._createGroupedDictionaryEntry(language, group.dictionaryEntries, true, tagAggregator, primaryReading));
         }
-        newDictionaryEntries.push(...this._groupDictionaryEntriesByHeadword(language, ungroupedDictionaryEntriesMap.values(), tagAggregator));
+        newDictionaryEntries.push(...this._groupDictionaryEntriesByHeadword(language, ungroupedDictionaryEntriesMap.values(), tagAggregator, primaryReading));
         return newDictionaryEntries;
     }
 
@@ -688,8 +749,9 @@ export class Translator {
      * @param {import('translator').SequenceQuery[]} sequenceList
      * @param {import('translation').TermEnabledDictionaryMap} enabledDictionaryMap
      * @param {TranslatorTagAggregator} tagAggregator
+     * @param {string} primaryReading
      */
-    async _addRelatedDictionaryEntries(groupedDictionaryEntries, ungroupedDictionaryEntriesMap, sequenceList, enabledDictionaryMap, tagAggregator) {
+    async _addRelatedDictionaryEntries(groupedDictionaryEntries, ungroupedDictionaryEntriesMap, sequenceList, enabledDictionaryMap, tagAggregator, primaryReading) {
         const databaseEntries = await this._database.findTermsBySequenceBulk(sequenceList);
         for (const databaseEntry of databaseEntries) {
             const {dictionaryEntries, ids} = groupedDictionaryEntries[databaseEntry.index];
@@ -697,7 +759,7 @@ export class Translator {
             if (ids.has(id)) { continue; }
 
             const {term} = databaseEntry;
-            const dictionaryEntry = this._createTermDictionaryEntryFromDatabaseEntry(databaseEntry, term, term, term, [], false, enabledDictionaryMap, tagAggregator);
+            const dictionaryEntry = this._createTermDictionaryEntryFromDatabaseEntry(databaseEntry, term, term, term, [], [], false, enabledDictionaryMap, tagAggregator, primaryReading);
             dictionaryEntries.push(dictionaryEntry);
             ids.add(id);
             ungroupedDictionaryEntriesMap.delete(id);
@@ -711,8 +773,9 @@ export class Translator {
      * @param {import('translation').TermEnabledDictionaryMap} enabledDictionaryMap
      * @param {import('translation').TermEnabledDictionaryMap} secondarySearchDictionaryMap
      * @param {TranslatorTagAggregator} tagAggregator
+     * @param {string} primaryReading
      */
-    async _addSecondaryRelatedDictionaryEntries(language, groupedDictionaryEntries, ungroupedDictionaryEntriesMap, enabledDictionaryMap, secondarySearchDictionaryMap, tagAggregator) {
+    async _addSecondaryRelatedDictionaryEntries(language, groupedDictionaryEntries, ungroupedDictionaryEntriesMap, enabledDictionaryMap, secondarySearchDictionaryMap, tagAggregator, primaryReading) {
         // Prepare grouping info
         /** @type {import('dictionary-database').TermExactRequest[]} */
         const termList = [];
@@ -770,7 +833,7 @@ export class Translator {
             for (const {ids, dictionaryEntries} of target.groups) {
                 if (ids.has(id)) { continue; }
 
-                const dictionaryEntry = this._createTermDictionaryEntryFromDatabaseEntry(databaseEntry, sourceText, sourceText, sourceText, [], false, enabledDictionaryMap, tagAggregator);
+                const dictionaryEntry = this._createTermDictionaryEntryFromDatabaseEntry(databaseEntry, sourceText, sourceText, sourceText, [], [], false, enabledDictionaryMap, tagAggregator, primaryReading);
                 dictionaryEntries.push(dictionaryEntry);
                 ids.add(id);
                 ungroupedDictionaryEntriesMap.delete(id);
@@ -782,9 +845,10 @@ export class Translator {
      * @param {string} language
      * @param {Iterable<import('translation-internal').TermDictionaryEntry>} dictionaryEntries
      * @param {TranslatorTagAggregator} tagAggregator
+     * @param {string} primaryReading
      * @returns {import('translation-internal').TermDictionaryEntry[]}
      */
-    _groupDictionaryEntriesByHeadword(language, dictionaryEntries, tagAggregator) {
+    _groupDictionaryEntriesByHeadword(language, dictionaryEntries, tagAggregator, primaryReading) {
         /** @type {Map<string, import('translation-internal').TermDictionaryEntry[]>} */
         const groups = new Map();
         const readingNormalizer = this._readingNormalizers.get(language);
@@ -802,7 +866,7 @@ export class Translator {
 
         const newDictionaryEntries = [];
         for (const groupDictionaryEntries of groups.values()) {
-            newDictionaryEntries.push(this._createGroupedDictionaryEntry(language, groupDictionaryEntries, false, tagAggregator));
+            newDictionaryEntries.push(this._createGroupedDictionaryEntry(language, groupDictionaryEntries, false, tagAggregator, primaryReading));
         }
         return newDictionaryEntries;
     }
@@ -1153,7 +1217,8 @@ export class Translator {
 
         const metas = await this._database.findTermMetaBulk(headwordMapKeys, enabledDictionaryMap);
         for (const {mode, data, dictionary, index} of metas) {
-            const {index: dictionaryIndex, priority: dictionaryPriority} = this._getDictionaryOrder(dictionary, enabledDictionaryMap);
+            const {index: dictionaryIndex} = this._getDictionaryOrder(dictionary, enabledDictionaryMap);
+            const dictionaryAlias = this._getDictionaryAlias(dictionary, enabledDictionaryMap);
             const map2 = headwordReadingMaps[index];
             for (const [reading, targets] of map2.entries()) {
                 switch (mode) {
@@ -1169,7 +1234,7 @@ export class Translator {
                                     headwordIndex,
                                     dictionary,
                                     dictionaryIndex,
-                                    dictionaryPriority,
+                                    dictionaryAlias,
                                     hasReading,
                                     frequencyValue,
                                     displayValue,
@@ -1193,7 +1258,7 @@ export class Translator {
                                 const devoicePositions = this._toNumberArray(devoice);
                                 pitches.push({
                                     type: 'pitch-accent',
-                                    position,
+                                    positions: position,
                                     nasalPositions,
                                     devoicePositions,
                                     tags: tags2,
@@ -1205,7 +1270,7 @@ export class Translator {
                                     headwordIndex,
                                     dictionary,
                                     dictionaryIndex,
-                                    dictionaryPriority,
+                                    dictionaryAlias,
                                     pitches,
                                 ));
                             }
@@ -1234,7 +1299,7 @@ export class Translator {
                                 headwordIndex,
                                 dictionary,
                                 dictionaryIndex,
-                                dictionaryPriority,
+                                dictionaryAlias,
                                 phoneticTranscriptions,
                             ));
                         }
@@ -1256,7 +1321,8 @@ export class Translator {
 
         const metas = await this._database.findKanjiMetaBulk(kanjiList, enabledDictionaryMap);
         for (const {character, mode, data, dictionary, index} of metas) {
-            const {index: dictionaryIndex, priority: dictionaryPriority} = this._getDictionaryOrder(dictionary, enabledDictionaryMap);
+            const {index: dictionaryIndex} = this._getDictionaryOrder(dictionary, enabledDictionaryMap);
+            const dictionaryAlias = this._getDictionaryAlias(dictionary, enabledDictionaryMap);
             switch (mode) {
                 case 'freq':
                     {
@@ -1266,7 +1332,7 @@ export class Translator {
                             frequencies.length,
                             dictionary,
                             dictionaryIndex,
-                            dictionaryPriority,
+                            dictionaryAlias,
                             character,
                             frequency,
                             displayValue,
@@ -1396,12 +1462,22 @@ export class Translator {
     /**
      * @param {string} dictionary
      * @param {import('translation').TermEnabledDictionaryMap|import('translation').KanjiEnabledDictionaryMap} enabledDictionaryMap
-     * @returns {{index: number, priority: number}}
+     * @returns {{index: number}}
      */
     _getDictionaryOrder(dictionary, enabledDictionaryMap) {
         const info = enabledDictionaryMap.get(dictionary);
-        const {index, priority} = typeof info !== 'undefined' ? info : {index: enabledDictionaryMap.size, priority: 0};
-        return {index, priority};
+        const {index} = typeof info !== 'undefined' ? info : {index: enabledDictionaryMap.size};
+        return {index};
+    }
+
+    /**
+     * @param {string} dictionary
+     * @param {import('translation').TermEnabledDictionaryMap|import('translation').KanjiEnabledDictionaryMap} enabledDictionaryMap
+     * @returns {string}
+     */
+    _getDictionaryAlias(dictionary, enabledDictionaryMap) {
+        const info = enabledDictionaryMap.get(dictionary);
+        return info?.alias || dictionary;
     }
 
     /**
@@ -1446,31 +1522,36 @@ export class Translator {
      * @param {number} index
      * @param {string} dictionary
      * @param {number} dictionaryIndex
-     * @param {number} dictionaryPriority
+     * @param {string} dictionaryAlias
      * @param {string} character
      * @param {number} frequency
      * @param {?string} displayValue
      * @param {boolean} displayValueParsed
      * @returns {import('dictionary').KanjiFrequency}
      */
-    _createKanjiFrequency(index, dictionary, dictionaryIndex, dictionaryPriority, character, frequency, displayValue, displayValueParsed) {
-        return {index, dictionary, dictionaryIndex, dictionaryPriority, character, frequency, displayValue, displayValueParsed};
+    _createKanjiFrequency(index, dictionary, dictionaryIndex, dictionaryAlias, character, frequency, displayValue, displayValueParsed) {
+        return {index, dictionary, dictionaryIndex, dictionaryAlias, character, frequency, displayValue, displayValueParsed};
     }
 
     /**
      * @param {string} character
      * @param {string} dictionary
+     * @param {string} dictionaryAlias
      * @param {string[]} onyomi
      * @param {string[]} kunyomi
      * @param {import('dictionary').KanjiStatGroups} stats
      * @param {string[]} definitions
+     * @param {import('translation').KanjiEnabledDictionaryMap} enabledDictionaryMap
      * @returns {import('dictionary').KanjiDictionaryEntry}
      */
-    _createKanjiDictionaryEntry(character, dictionary, onyomi, kunyomi, stats, definitions) {
+    _createKanjiDictionaryEntry(character, dictionary, dictionaryAlias, onyomi, kunyomi, stats, definitions, enabledDictionaryMap) {
+        const {index: dictionaryIndex} = this._getDictionaryOrder(dictionary, enabledDictionaryMap);
         return {
             type: 'kanji',
             character,
             dictionary,
+            dictionaryIndex,
+            dictionaryAlias,
             onyomi,
             kunyomi,
             tags: [],
@@ -1535,7 +1616,7 @@ export class Translator {
      * @param {number[]} headwordIndices
      * @param {string} dictionary
      * @param {number} dictionaryIndex
-     * @param {number} dictionaryPriority
+     * @param {string} dictionaryAlias
      * @param {number} id
      * @param {number} score
      * @param {number[]} sequences
@@ -1544,13 +1625,13 @@ export class Translator {
      * @param {import('dictionary-data').TermGlossaryContent[]} entries
      * @returns {import('dictionary').TermDefinition}
      */
-    _createTermDefinition(index, headwordIndices, dictionary, dictionaryIndex, dictionaryPriority, id, score, sequences, isPrimary, tags, entries) {
+    _createTermDefinition(index, headwordIndices, dictionary, dictionaryIndex, dictionaryAlias, id, score, sequences, isPrimary, tags, entries) {
         return {
             index,
             headwordIndices,
             dictionary,
             dictionaryIndex,
-            dictionaryPriority,
+            dictionaryAlias,
             id,
             score,
             frequencyOrder: 0,
@@ -1566,12 +1647,12 @@ export class Translator {
      * @param {number} headwordIndex
      * @param {string} dictionary
      * @param {number} dictionaryIndex
-     * @param {number} dictionaryPriority
+     * @param {string} dictionaryAlias
      * @param {import('dictionary').Pronunciation[]} pronunciations
      * @returns {import('dictionary').TermPronunciation}
      */
-    _createTermPronunciation(index, headwordIndex, dictionary, dictionaryIndex, dictionaryPriority, pronunciations) {
-        return {index, headwordIndex, dictionary, dictionaryIndex, dictionaryPriority, pronunciations};
+    _createTermPronunciation(index, headwordIndex, dictionary, dictionaryIndex, dictionaryAlias, pronunciations) {
+        return {index, headwordIndex, dictionary, dictionaryIndex, dictionaryAlias, pronunciations};
     }
 
     /**
@@ -1579,39 +1660,43 @@ export class Translator {
      * @param {number} headwordIndex
      * @param {string} dictionary
      * @param {number} dictionaryIndex
-     * @param {number} dictionaryPriority
+     * @param {string} dictionaryAlias
      * @param {boolean} hasReading
      * @param {number} frequency
      * @param {?string} displayValue
      * @param {boolean} displayValueParsed
      * @returns {import('dictionary').TermFrequency}
      */
-    _createTermFrequency(index, headwordIndex, dictionary, dictionaryIndex, dictionaryPriority, hasReading, frequency, displayValue, displayValueParsed) {
-        return {index, headwordIndex, dictionary, dictionaryIndex, dictionaryPriority, hasReading, frequency, displayValue, displayValueParsed};
+    _createTermFrequency(index, headwordIndex, dictionary, dictionaryIndex, dictionaryAlias, hasReading, frequency, displayValue, displayValueParsed) {
+        return {index, headwordIndex, dictionary, dictionaryIndex, dictionaryAlias, hasReading, frequency, displayValue, displayValueParsed};
     }
 
     /**
      * @param {boolean} isPrimary
+     * @param {import('translation-internal').TextProcessorRuleChainCandidate[]} textProcessorRuleChainCandidates
      * @param {import('translation-internal').InflectionRuleChainCandidate[]} inflectionRuleChainCandidates
      * @param {number} score
      * @param {number} dictionaryIndex
-     * @param {number} dictionaryPriority
+     * @param {string} dictionaryAlias
      * @param {number} sourceTermExactMatchCount
+     * @param {boolean} matchPrimaryReading
      * @param {number} maxOriginalTextLength
      * @param {import('dictionary').TermHeadword[]} headwords
      * @param {import('dictionary').TermDefinition[]} definitions
      * @returns {import('translation-internal').TermDictionaryEntry}
      */
-    _createTermDictionaryEntry(isPrimary, inflectionRuleChainCandidates, score, dictionaryIndex, dictionaryPriority, sourceTermExactMatchCount, maxOriginalTextLength, headwords, definitions) {
+    _createTermDictionaryEntry(isPrimary, textProcessorRuleChainCandidates, inflectionRuleChainCandidates, score, dictionaryIndex, dictionaryAlias, sourceTermExactMatchCount, matchPrimaryReading, maxOriginalTextLength, headwords, definitions) {
         return {
             type: 'term',
             isPrimary,
+            textProcessorRuleChainCandidates,
             inflectionRuleChainCandidates,
             score,
             frequencyOrder: 0,
             dictionaryIndex,
-            dictionaryPriority,
+            dictionaryAlias,
             sourceTermExactMatchCount,
+            matchPrimaryReading,
             maxOriginalTextLength,
             headwords,
             definitions,
@@ -1625,13 +1710,15 @@ export class Translator {
      * @param {string} originalText
      * @param {string} transformedText
      * @param {string} deinflectedText
+     * @param {import('translation-internal').TextProcessorRuleChainCandidate[]} textProcessorRuleChainCandidates
      * @param {import('translation-internal').InflectionRuleChainCandidate[]} inflectionRuleChainCandidates
      * @param {boolean} isPrimary
      * @param {Map<string, import('translation').FindTermDictionary>} enabledDictionaryMap
      * @param {TranslatorTagAggregator} tagAggregator
+     * @param {string} primaryReading
      * @returns {import('translation-internal').TermDictionaryEntry}
      */
-    _createTermDictionaryEntryFromDatabaseEntry(databaseEntry, originalText, transformedText, deinflectedText, inflectionRuleChainCandidates, isPrimary, enabledDictionaryMap, tagAggregator) {
+    _createTermDictionaryEntryFromDatabaseEntry(databaseEntry, originalText, transformedText, deinflectedText, textProcessorRuleChainCandidates, inflectionRuleChainCandidates, isPrimary, enabledDictionaryMap, tagAggregator, primaryReading) {
         const {
             matchType,
             matchSource,
@@ -1649,7 +1736,9 @@ export class Translator {
         // Cast is safe because getDeinflections filters out deinflection definitions
         const contentDefinitions = /** @type {import('dictionary-data').TermGlossaryContent[]} */ (definitions);
         const reading = (rawReading.length > 0 ? rawReading : term);
-        const {index: dictionaryIndex, priority: dictionaryPriority} = this._getDictionaryOrder(dictionary, enabledDictionaryMap);
+        const matchPrimaryReading = primaryReading.length > 0 && reading === primaryReading;
+        const {index: dictionaryIndex} = this._getDictionaryOrder(dictionary, enabledDictionaryMap);
+        const dictionaryAlias = this._getDictionaryAlias(dictionary, enabledDictionaryMap);
         const sourceTermExactMatchCount = (isPrimary && deinflectedText === term ? 1 : 0);
         const source = this._createSource(originalText, transformedText, deinflectedText, matchType, matchSource, isPrimary);
         const maxOriginalTextLength = originalText.length;
@@ -1665,14 +1754,16 @@ export class Translator {
 
         return this._createTermDictionaryEntry(
             isPrimary,
+            textProcessorRuleChainCandidates,
             inflectionRuleChainCandidates,
             score,
             dictionaryIndex,
-            dictionaryPriority,
+            dictionaryAlias,
             sourceTermExactMatchCount,
+            matchPrimaryReading,
             maxOriginalTextLength,
             [this._createTermHeadword(0, term, reading, [source], headwordTagGroups, rules)],
-            [this._createTermDefinition(0, [0], dictionary, dictionaryIndex, dictionaryPriority, id, score, [sequence], isPrimary, definitionTagGroups, contentDefinitions)],
+            [this._createTermDefinition(0, [0], dictionary, dictionaryIndex, dictionaryAlias, id, score, [sequence], isPrimary, definitionTagGroups, contentDefinitions)],
         );
     }
 
@@ -1681,9 +1772,10 @@ export class Translator {
      * @param {import('translation-internal').TermDictionaryEntry[]} dictionaryEntries
      * @param {boolean} checkDuplicateDefinitions
      * @param {TranslatorTagAggregator} tagAggregator
+     * @param {string} primaryReading
      * @returns {import('translation-internal').TermDictionaryEntry}
      */
-    _createGroupedDictionaryEntry(language, dictionaryEntries, checkDuplicateDefinitions, tagAggregator) {
+    _createGroupedDictionaryEntry(language, dictionaryEntries, checkDuplicateDefinitions, tagAggregator, primaryReading) {
         // Headwords are generated before sorting, so that the order of dictionaryEntries can be maintained
         const definitionEntries = [];
         /** @type {Map<string, import('dictionary').TermHeadword>} */
@@ -1701,27 +1793,36 @@ export class Translator {
         // Merge dictionary entry data
         let score = Number.MIN_SAFE_INTEGER;
         let dictionaryIndex = Number.MAX_SAFE_INTEGER;
-        let dictionaryPriority = Number.MIN_SAFE_INTEGER;
+        const dictionaryAlias = '';
         let maxOriginalTextLength = 0;
         let isPrimary = false;
         /** @type {import('dictionary').TermDefinition[]} */
         const definitions = [];
         /** @type {?Map<string, import('dictionary').TermDefinition>} */
         const definitionsMap = checkDuplicateDefinitions ? new Map() : null;
+
         let inflections = null;
+        let textProcesses = null;
 
         for (const {dictionaryEntry, headwordIndexMap} of definitionEntries) {
             score = Math.max(score, dictionaryEntry.score);
             dictionaryIndex = Math.min(dictionaryIndex, dictionaryEntry.dictionaryIndex);
-            dictionaryPriority = Math.max(dictionaryPriority, dictionaryEntry.dictionaryPriority);
+
             if (dictionaryEntry.isPrimary) {
                 isPrimary = true;
                 maxOriginalTextLength = Math.max(maxOriginalTextLength, dictionaryEntry.maxOriginalTextLength);
+
                 const dictionaryEntryInflections = dictionaryEntry.inflectionRuleChainCandidates;
+                const dictionaryEntryTextProcesses = dictionaryEntry.textProcessorRuleChainCandidates;
+
                 if (inflections === null || dictionaryEntryInflections.length < inflections.length) {
                     inflections = dictionaryEntryInflections;
                 }
+                if (textProcesses === null || dictionaryEntryTextProcesses.length < textProcesses.length) {
+                    textProcesses = dictionaryEntryTextProcesses;
+                }
             }
+
             if (definitionsMap !== null) {
                 this._addTermDefinitions(definitions, definitionsMap, dictionaryEntry.definitions, headwordIndexMap, tagAggregator);
             } else {
@@ -1732,7 +1833,11 @@ export class Translator {
         const headwordsArray = [...headwords.values()];
 
         let sourceTermExactMatchCount = 0;
-        for (const {sources} of headwordsArray) {
+        let matchPrimaryReading = false;
+        for (const {sources, reading} of headwordsArray) {
+            if (primaryReading.length > 0 && reading === primaryReading) {
+                matchPrimaryReading = true;
+            }
             for (const source of sources) {
                 if (source.isPrimary && source.matchSource === 'term') {
                     ++sourceTermExactMatchCount;
@@ -1743,11 +1848,13 @@ export class Translator {
 
         return this._createTermDictionaryEntry(
             isPrimary,
+            textProcesses !== null ? textProcesses : [],
             inflections !== null ? inflections : [],
             score,
             dictionaryIndex,
-            dictionaryPriority,
+            dictionaryAlias,
             sourceTermExactMatchCount,
+            matchPrimaryReading,
             maxOriginalTextLength,
             headwordsArray,
             definitions,
@@ -1861,12 +1968,12 @@ export class Translator {
      * @param {number[]} headwordIndexMap
      */
     _addTermDefinitionsFast(definitions, newDefinitions, headwordIndexMap) {
-        for (const {headwordIndices, dictionary, dictionaryIndex, dictionaryPriority, sequences, id, score, isPrimary, tags, entries} of newDefinitions) {
+        for (const {headwordIndices, dictionary, dictionaryIndex, dictionaryAlias, sequences, id, score, isPrimary, tags, entries} of newDefinitions) {
             const headwordIndicesNew = [];
             for (const headwordIndex of headwordIndices) {
                 headwordIndicesNew.push(headwordIndexMap[headwordIndex]);
             }
-            definitions.push(this._createTermDefinition(definitions.length, headwordIndicesNew, dictionary, dictionaryIndex, dictionaryPriority, id, score, sequences, isPrimary, tags, entries));
+            definitions.push(this._createTermDefinition(definitions.length, headwordIndicesNew, dictionary, dictionaryIndex, dictionaryAlias, id, score, sequences, isPrimary, tags, entries));
         }
     }
 
@@ -1878,11 +1985,11 @@ export class Translator {
      * @param {TranslatorTagAggregator} tagAggregator
      */
     _addTermDefinitions(definitions, definitionsMap, newDefinitions, headwordIndexMap, tagAggregator) {
-        for (const {headwordIndices, dictionary, dictionaryIndex, dictionaryPriority, sequences, id, score, isPrimary, tags, entries} of newDefinitions) {
+        for (const {headwordIndices, dictionary, dictionaryIndex, dictionaryAlias, sequences, id, score, isPrimary, tags, entries} of newDefinitions) {
             const key = this._createMapKey([dictionary, ...entries]);
             let definition = definitionsMap.get(key);
             if (typeof definition === 'undefined') {
-                definition = this._createTermDefinition(definitions.length, [], dictionary, dictionaryIndex, dictionaryPriority, id, score, [...sequences], isPrimary, [], [...entries]);
+                definition = this._createTermDefinition(definitions.length, [], dictionary, dictionaryIndex, dictionaryAlias, id, score, [...sequences], isPrimary, [], [...entries]);
                 definitions.push(definition);
                 definitionsMap.set(key, definition);
             } else {
@@ -1917,6 +2024,22 @@ export class Translator {
     }
 
     /**
+     * @param {import('dictionary').KanjiDictionaryEntry[]} dictionaryEntries
+     */
+    _sortKanjiDictionaryEntries(dictionaryEntries) {
+        /**
+         * @param {import('dictionary').KanjiDictionaryEntry} v1
+         * @param {import('dictionary').KanjiDictionaryEntry} v2
+         * @returns {number}
+         */
+        const compareFunction = (v1, v2) => {
+            // Sort by dictionary order
+            return v1.dictionaryIndex - v2.dictionaryIndex;
+        };
+        dictionaryEntries.sort(compareFunction);
+    }
+
+    /**
      * @param {import('translation-internal').TermDictionaryEntry[]} dictionaryEntries
      */
     _sortTermDictionaryEntries(dictionaryEntries) {
@@ -1927,11 +2050,19 @@ export class Translator {
          * @returns {number}
          */
         const compareFunction = (v1, v2) => {
-            // Sort by length of source term
-            let i = v2.maxOriginalTextLength - v1.maxOriginalTextLength;
+            // Sort by reading match
+            let i = (v2.matchPrimaryReading ? 1 : 0) - (v1.matchPrimaryReading ? 1 : 0);
             if (i !== 0) { return i; }
 
-            // Sort by the number of inflection reasons
+            // Sort by length of source term
+            i = v2.maxOriginalTextLength - v1.maxOriginalTextLength;
+            if (i !== 0) { return i; }
+
+            // Sort by length of the shortest text processing chain
+            i = this._getShortestTextProcessingChainLength(v1.textProcessorRuleChainCandidates) - this._getShortestTextProcessingChainLength(v2.textProcessorRuleChainCandidates);
+            if (i !== 0) { return i; }
+
+            // Sort by length of the shortest inflection chain
             i = this._getShortestInflectionChainLength(v1.inflectionRuleChainCandidates) - this._getShortestInflectionChainLength(v2.inflectionRuleChainCandidates);
             if (i !== 0) { return i; }
 
@@ -1941,10 +2072,6 @@ export class Translator {
 
             // Sort by frequency order
             i = v1.frequencyOrder - v2.frequencyOrder;
-            if (i !== 0) { return i; }
-
-            // Sort by dictionary priority
-            i = v2.dictionaryPriority - v1.dictionaryPriority;
             if (i !== 0) { return i; }
 
             // Sort by dictionary order
@@ -1988,10 +2115,6 @@ export class Translator {
         const compareFunction = (v1, v2) => {
             // Sort by frequency order
             let i = v1.frequencyOrder - v2.frequencyOrder;
-            if (i !== 0) { return i; }
-
-            // Sort by dictionary priority
-            i = v2.dictionaryPriority - v1.dictionaryPriority;
             if (i !== 0) { return i; }
 
             // Sort by dictionary order
@@ -2038,12 +2161,8 @@ export class Translator {
          * @returns {number}
          */
         const compare = (v1, v2) => {
-            // Sort by dictionary priority
-            let i = v2.dictionaryPriority - v1.dictionaryPriority;
-            if (i !== 0) { return i; }
-
             // Sory by headword order
-            i = v1.headwordIndex - v2.headwordIndex;
+            let i = v1.headwordIndex - v2.headwordIndex;
             if (i !== 0) { return i; }
 
             // Sort by dictionary order
@@ -2067,12 +2186,8 @@ export class Translator {
          * @returns {number}
          */
         const compare = (v1, v2) => {
-            // Sort by dictionary priority
-            let i = v2.dictionaryPriority - v1.dictionaryPriority;
-            if (i !== 0) { return i; }
-
             // Sort by dictionary order
-            i = v1.dictionaryIndex - v2.dictionaryIndex;
+            let i = v1.dictionaryIndex - v2.dictionaryIndex;
             if (i !== 0) { return i; }
 
             // Default order
@@ -2107,8 +2222,8 @@ export class Translator {
             }
             dictionaryEntry.frequencyOrder = (
                 frequencyMin <= frequencyMax ?
-                (ascending ? frequencyMin : -frequencyMax) :
-                (ascending ? Number.MAX_SAFE_INTEGER : 0)
+                    (ascending ? frequencyMin : -frequencyMax) :
+                    (ascending ? Number.MAX_SAFE_INTEGER : 0)
             );
             for (const definition of definitions) {
                 frequencyMin = Number.MAX_SAFE_INTEGER;
@@ -2122,12 +2237,25 @@ export class Translator {
                 }
                 definition.frequencyOrder = (
                     frequencyMin <= frequencyMax ?
-                    (ascending ? frequencyMin : -frequencyMax) :
-                    (ascending ? Number.MAX_SAFE_INTEGER : 0)
+                        (ascending ? frequencyMin : -frequencyMax) :
+                        (ascending ? Number.MAX_SAFE_INTEGER : 0)
                 );
             }
             frequencyMap.clear();
         }
+    }
+
+    /**
+     * @param {import('translation-internal').TextProcessorRuleChainCandidate[]} inflectionRuleChainCandidates
+     * @returns {number}
+     */
+    _getShortestTextProcessingChainLength(inflectionRuleChainCandidates) {
+        if (inflectionRuleChainCandidates.length === 0) { return 0; }
+        let length = Number.MAX_SAFE_INTEGER;
+        for (const candidate of inflectionRuleChainCandidates) {
+            length = Math.min(length, candidate.length);
+        }
+        return length;
     }
 
     /**
