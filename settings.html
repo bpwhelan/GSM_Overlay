@@ -18,8 +18,17 @@
   <label>Font Size:
     <input type="number" id="fontSize" value="42" />
   </label>
-  <label>WebSocket URL:
-    <input type="text" id="wsUrl" value="ws://localhost:6677/api/ws/text/origin" />
+  <label>Primary WebSocket URL:
+      <span id="wsstatus1"
+        style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-left: 4px;">
+  </span>
+    <input type="text" id="wsUrl1" value="ws://localhost:6677/api/ws/text/origin" />
+  </label>
+  <label>Secondary WebSocket URL:
+      <span id="wsstatus2"
+        style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-left: 4px;">
+  </span>
+    <input type="text" id="wsUrl2" value="ws://localhost:6677" />
   </label>
 
   <script>
@@ -28,12 +37,33 @@
       const newSize = event.target.value;
       ipcRenderer.send("fontsize-changed", newSize)
     })
-    document.getElementById("wsUrl").addEventListener("change", (event) => {
-      ipcRenderer.send("weburl-changed", event.target.value)
+    document.getElementById("wsUrl1").addEventListener("blur", (event) => {
+      ipcRenderer.send("weburl1-changed", event.target.value)
     })
-    ipcRenderer.on("preload-settings", (event, {fontSize, weburl}) => {
+    document.getElementById("wsUrl2").addEventListener("blur", (event) => {
+      ipcRenderer.send("weburl2-changed", event.target.value)
+    })
+    ipcRenderer.on("preload-settings", (event, {settings, websocketStates}) => {
+      const {fontSize, weburl1, weburl2} = settings;
       document.getElementById("fontSize").value = fontSize;
-      document.getElementById("wsUrl").value = weburl;
+      document.getElementById("wsUrl1").value = weburl1;
+      document.getElementById("wsUrl2").value = weburl2;
+      document.getElementById("wsstatus1").style.backgroundColor = websocketStates.ws1 ? "green" : "red"
+      document.getElementById("wsstatus2").style.backgroundColor = websocketStates.ws2 ? "green" : "red"
+    })
+    ipcRenderer.on("websocket-closed", (event, type) => {
+      if (type == "ws1") {
+        document.getElementById("wsstatus1").style.backgroundColor = "red"
+      } else {
+        document.getElementById("wsstatus2").style.backgroundColor = "red"
+      }
+    })
+    ipcRenderer.on("websocket-opened", (event, type) => {
+      if (type == "ws1") {
+        document.getElementById("wsstatus1").style.backgroundColor = "green"
+      } else {
+        document.getElementById("wsstatus2").style.backgroundColor = "green"
+      }
     })
   </script>
 </body>

@@ -161,6 +161,7 @@ function stopResize() {
 </script>
 
 <script>
+  const { ipcRenderer } = require("electron");
   const dragBar = document.getElementById("draggable");
   const textEl = document.getElementById("text");
   const mainBox = document.getElementById("main-box");
@@ -191,11 +192,21 @@ function stopResize() {
   }
 
 
-    function setupWebSocket(weburl) {
-      if (window.ws && window.ws.readyState !== WebSocket.CLOSED) {
-        window.ws.close();
+    function setupWebSocket(weburl, isPrimary) {
+      let type ="ws1";
+      if (!isPrimary) {
+        type = "ws2";
+      }
+      if (window[type] && window[type].readyState !== WebSocket.CLOSED) {
+        window[type].close();
       }
       const websocket = new WebSocket(weburl);
+      websocket.onclose = (event) => {
+        ipcRenderer.send(`websocket-closed`, type)
+      }
+      websocket.onopen = (event) => {
+        ipcRenderer.send(`websocket-opened`, type)
+      }
       websocket.onmessage = (event) => {
         let line = event.data;
         try {
@@ -205,11 +216,11 @@ function stopResize() {
         }
         document.getElementById("text").textContent = line[0] == '\n' ? line.slice(1) : line;
       }
-      window.ws = websocket;
+      window[type] = websocket;
     }
+
     let resizeMode = false;
     let pinned = false;
-    const { ipcRenderer } = require("electron");
     document.getElementById("btn-pin").addEventListener("click", () => {
       if (!pinned) {
         document.body.classList.add("force-visible");
@@ -234,14 +245,19 @@ function stopResize() {
     });
     ipcRenderer.on("load-settings", (event, newsettings) => {
       textEl.style.fontSize = `${newsettings.fontSize}px`;
-      setupWebSocket(newsettings.weburl)
+      setupWebSocket(newsettings.weburl1, true)
+      setupWebSocket(newsettings.weburl2, false)
     })
 
     ipcRenderer.on("new-fontsize", (event, newsize) => {
       textEl.style.fontSize = `${newsize}px`;
     })
-    ipcRenderer.on("new-weburl", (event, newurl) => {
-      setupWebSocket(newurl)
+    ipcRenderer.on("new-weburl1", (event, newurl) => {
+      console.log("yes")
+      setupWebSocket(newurl, true)
+    })
+    ipcRenderer.on("new-weburl2", (event, newurl) => {
+      setupWebSocket(newurl, false)
     })
 
     ipcRenderer.on("force-visible", (event, value) => {
@@ -255,8 +271,9 @@ function stopResize() {
     });
     ipcRenderer.on("request-current-settings", () => {
       const fontSize = parseInt(textEl.style.fontSize, 10);
-      const weburl = window.ws.url;
-      ipcRenderer.send("reply-current-settings", { fontSize, weburl });
+      const weburl1 = window.ws1.url;
+      const weburl2 = window.ws2.url;
+      ipcRenderer.send("reply-current-settings", { fontSize, weburl1, weburl2 });
     })
 
   </script>

@@ -6,13 +6,15 @@ const path = require('path');
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 let userSettings = {
   "fontSize": 42,
-  "weburl": "ws://localhost:6677/api/ws/text/origin"
+  "weburl1": "ws://localhost:6677/api/ws/text/origin",
+  "weburl2": "ws://localhost:6677"
 };
 
 if (fs.existsSync(settingsPath)) {
   try {
     const data = fs.readFileSync(settingsPath, "utf-8");
-    userSettings = JSON.parse(data)
+    oldUserSettings = JSON.parse(data)
+    userSettings = { ...userSettings, ...oldUserSettings}
 
   } catch (error) {
     console.error("Failed to load settings.json:", e)
@@ -112,6 +114,16 @@ win.on('focus', () => {
     yomitanOptionsWin.loadURL(`chrome-extension://${ext.id}/settings.html`);
   });
 
+  let websocketStates = {
+    "ws1": false,
+    "ws2": false
+  }
+  ipcMain.on("websocket-closed", (event, type) => {
+    websocketStates[type] = false
+  });
+  ipcMain.on("websocket-opened", (event, type) => {
+    websocketStates[type] = true
+  });
 
   ipcMain.on("open-settings", () => {
     if (win && !win.isDestroyed()) {
@@ -131,13 +143,27 @@ win.on('focus', () => {
         },
       });
       settingsWin.removeMenu()
-
+      
       settingsWin.loadFile("settings.html");
-      settingsWin.webContents.send("preload-settings", settings)
       settingsWin.on("closed", () => {
         if (win && !win.isDestroyed()) {
           win.webContents.send("force-visible", false);
         }
+      })
+      const closedListenerFunction = (event, type) => {
+        settingsWin.send("websocket-closed", type)
+      }
+      const openedListenerFunction = (event, type) => {
+        settingsWin.send("websocket-opened", type);
+      };
+      ipcMain.on("websocket-closed", closedListenerFunction)
+      ipcMain.on("websocket-opened", openedListenerFunction)
+      console.log(websocketStates)
+      settingsWin.webContents.send("preload-settings", {settings, websocketStates})
+      
+      settingsWin.on("closed", () => {
+        ipcMain.removeListener("websocket-closed", closedListenerFunction)
+        ipcMain.removeListener("websocket-opened", openedListenerFunction)
       })
     })
 
@@ -147,10 +173,15 @@ win.on('focus', () => {
     win.webContents.send("new-fontsize", newsize);
     userSettings.fontSize = newsize;
   })
-  ipcMain.on("weburl-changed", (event, newurl) => {
-    userSettings.weburl = newurl;
-    win.webContents.send("new-weburl", newurl)
+  ipcMain.on("weburl1-changed", (event, newurl) => {
+    userSettings.weburl1 = newurl;
+    win.webContents.send("new-weburl1", newurl)
   })
+  ipcMain.on("weburl2-changed", (event, newurl) => {
+    userSettings.weburl2 = newurl;
+    win.webContents.send("new-weburl2", newurl)
+  })
+  
 
   app.on("before-quit", () => {
     fs.writeFileSync(settingsPath, JSON.stringify(userSettings, null, 2))
