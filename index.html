@@ -449,12 +449,9 @@ background: rgba(202, 12, 12, 0.692);
     });
     ipcRenderer.on("request-current-settings", () => {
       const fontSize = parseInt(textEl.style.fontSize, 10);
-      if (window.ws1 != null && window.ws2 == null) {
-        console.log("ws1 url:", window.ws1.url);
-        const weburl1 = window.ws1.url;
-        const weburl2 = window.ws2.url;
-        ipcRenderer.send("reply-current-settings", { fontSize, weburl1, weburl2 });
-      }
+      const weburl1 = window.ws1 ? window.ws1.url : null;
+      const weburl2 = window.ws2 ? window.ws2.url : null;
+      ipcRenderer.send("reply-current-settings", { fontSize, weburl1, weburl2 });
     })
 
 
