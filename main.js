@@ -7,7 +7,7 @@ const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 let userSettings = {
   "fontSize": 42,
   "weburl1": "ws://localhost:55002",
-  "weburl2": "ws://localhost:55003"
+  "weburl2": "ws://localhost:55499"
 };
 
 if (fs.existsSync(settingsPath)) {
@@ -95,7 +95,7 @@ win.on('focus', () => {
   win.once('ready-to-show', () => {
     win.show();
     win.webContents.send("load-settings", userSettings);
-    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setAlwaysOnTop(true, 'dock');
   });
 
   ipcMain.on("app-close", () => {
@@ -188,7 +188,7 @@ win.on('focus', () => {
   })
   
   ipcMain.on("text-recieved", (event, text) => {
-    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setAlwaysOnTop(true, 'dock');
     // win.webContents.send("new-text", text);
   });
 

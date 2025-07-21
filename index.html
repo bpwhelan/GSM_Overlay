@@ -41,7 +41,6 @@ background: rgba(202, 12, 12, 0.692);
     white-space: nowrap;
     background: rgba(15, 15, 15, 0);
     color: rgba(255, 255, 255, 0);
-    min-height: 25px;
     text-align: start;
     pointer-events: auto;
     user-select: text;
@@ -111,7 +110,7 @@ background: rgba(202, 12, 12, 0.692);
     transition: opacity 0.3s ease;
   }
 
-  #main-box:hover #boxes:hover #resize-handle {
+  #main-box:hover #boxes:hover #resize-handle .text-box:hover {
     opacity: 1;
   }
 
@@ -157,11 +156,6 @@ background: rgba(202, 12, 12, 0.692);
     <div id="text" class="interactive">Waiting for Webhook</div>
     <div draggable="false" id="resize-handle" class="interactive half-interactive"></div>
   </div>
-
-  <div id="boxes" class="interactive text">
-
-  </div>
-
 </body>
 
 
@@ -270,7 +264,7 @@ background: rgba(202, 12, 12, 0.692);
         }
 
         // Clear existing text boxes
-        // clearTextBoxes();
+        clearTextBoxes();
 
         console.log(data);
 
@@ -291,11 +285,7 @@ background: rgba(202, 12, 12, 0.692);
               });
             }
           });
-          let container = document.getElementById("boxes");
-          container.innerHTML = ""; // Clear previous boxes
-          textboxes.forEach(box => container.appendChild(box));
-          container.style.width = "100%";
-          container.style.height = "100%";
+          textboxes.forEach(box => document.body.appendChild(box));
         } else {
           // Legacy format - single sentence
           let line = data?.sentence || data;
@@ -339,8 +329,8 @@ background: rgba(202, 12, 12, 0.692);
   // Function to create individual text boxes at specified coordinates
   function createTextBox(sentence, x1, y1, x2, y2, fontSize, noBackground = false, transparentText = false, verticalText = false) {
     console.log(`Creating box for "${sentence}" at (${x1}, ${y1}) to (${x2}, ${y2}) with font size ${fontSize}`);
-    const textBox = document.createElement('p');
-    textBox.className = 'text-box';
+    const textBox = document.createElement('div');
+    textBox.className = 'text-box interactive';
     textBox.textContent = sentence[0] == '\n' ? sentence.slice(1) : sentence;
 
     // Set position and dimensions
