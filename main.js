@@ -6,8 +6,8 @@ const path = require('path');
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 let userSettings = {
   "fontSize": 42,
-  "weburl1": "ws://localhost:49999",
-  "weburl2": "ws://localhost:6677"
+  "weburl1": "ws://localhost:55002",
+  "weburl2": "ws://localhost:55003"
 };
 
 if (fs.existsSync(settingsPath)) {
@@ -100,6 +100,10 @@ win.on('focus', () => {
 
   ipcMain.on("app-close", () => {
     app.quit();
+  });
+
+  ipcMain.on("app-minimize", () => {
+    win.minimize();
   });
 
   ipcMain.on("open-yomitan-settings", () => {

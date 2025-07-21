@@ -383,7 +383,7 @@ class WebsocketServerThread(threading.Thread):
 
 if __name__ == "__main__":
     # Start the WebsocketServerThread on your desired port (e.g., 49999)
-    WebsocketServerThread(read=True, ws_port=49999).start()
+    WebsocketServerThread(read=True, ws_port=55499).start()
     while True:
         time.sleep(1)
     
