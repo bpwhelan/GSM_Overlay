@@ -101,9 +101,11 @@ app.whenReady().then(async () => {
   }
   win.once('ready-to-show', () => {
     win.show();
-    win.openDevTools({ mode: 'detach' });
+    if (isDev) {
+      win.openDevTools({ mode: 'detach' });
+    }
     win.webContents.send("load-settings", userSettings);
-      win.setAlwaysOnTop(true, 'screen-saver');
+    win.setAlwaysOnTop(true, 'screen-saver');
   });
 
   ipcMain.on("app-close", () => {
@@ -196,7 +198,7 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.on("text-recieved", (event, text) => {
-      win.setAlwaysOnTop(true, 'screen-saver');
+    win.setAlwaysOnTop(true, 'screen-saver');
     // win.webContents.send("new-text", text);
   });
 

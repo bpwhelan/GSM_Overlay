@@ -52,6 +52,22 @@ background: rgba(202, 12, 12, 0.692);
     overflow: hidden;
   }
 
+  .text-box-container {
+    position: absolute;
+    white-space: nowrap;
+    /* background: rgba(15, 15, 15, 0);
+    color: rgba(255, 255, 255, 0); */
+    text-align: start;
+    pointer-events: auto;
+    user-select: text;
+    z-index: 1000;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    overflow: hidden;
+  }
+
   body.force-visible .text-box,
   body:hover .text-box {
     background: rgba(15, 15, 15, 0.856);
@@ -156,6 +172,7 @@ background: rgba(202, 12, 12, 0.692);
     <div id="text" class="interactive">Waiting for Webhook</div>
     <div draggable="false" id="resize-handle" class="interactive half-interactive"></div>
   </div>
+  <div id="text-box-container" class="text-box-container interactive"></div>
 </body>
 
 
@@ -271,27 +288,29 @@ background: rgba(202, 12, 12, 0.692);
         // Check if data has words array (new word-level coordinate format)
         if (Array.isArray(data) && data.every(item => item.text && item.bounding_rect)) {
           // Handle array of {text, bounding_rect}
-          let bigInteractiveArea = document.createElement("div");
-          bigInteractiveArea.className = "text-box interactive";
+          let bigInteractiveArea = document.getElementById("text-box-container");
+          bigInteractiveArea.innerHTML = ""; // Clear previous content
+          bigInteractiveArea.className = "text-box-container interactive";
           let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
           data.forEach(line => {
             x1 = line.bounding_rect.x1 - 10;
             y1 = line.bounding_rect.y1 - 10;
             x2 = line.bounding_rect.x3 + 10;
             y2 = line.bounding_rect.y3 + 10;
-            let div = document.createElement("div");
-            div.className = "text-box interactive";
-            div.style.left = `${x1}px`;
-            div.style.top = `${y1}px`;
-            div.style.width = `${x2 - x1}px`;
-            div.style.height = `${y2 - y1}px`;
-            div.style.fontSize = `${estimateFontSize(line.text, x2 - x1, y2 - y1)}px`;
-            div.textContent = line.text[0] == '\n' ? line.text.slice(1) : line.text;
+            // let div = document.createElement("div");
+            // div.className = "text-box interactive";
+            // div.style.left = `${x1}px`;
+            // div.style.top = `${y1}px`;
+            // div.style.width = `${x2 - x1}px`;
+            // div.style.height = `${y2 - y1}px`;
+            // div.style.fontSize = `${estimateFontSize(line.text, x2 - x1, y2 - y1)}px`;
+            // div.textContent = line.text[0] == '\n' ? line.text.slice(1) : line.text;
+            // div.style.background = 'rgba(0,0,0,0)';
             line.words.forEach(word => {
               const rect = word.bounding_rect;
               // Estimate Font size with avg bounding box
               const fontSize = estimateFontSize(word.text, rect.x3 - rect.x1, rect.y3 - rect.y1);
-              const box = createTextBox(word.text, rect.x1, rect.y1, rect.x3, rect.y3, fontSize, true, false, false);
+              const box = createTextBox(word.text, rect.x1, rect.y1, rect.x3, rect.y3, fontSize, true, true, false);
               document.body.appendChild(box);
               // div.appendChild(box);
             });
@@ -324,8 +343,7 @@ background: rgba(202, 12, 12, 0.692);
           bigInteractiveArea.style.top = `${miny}px`;
           bigInteractiveArea.style.width = `${maxx - minx}px`;
           bigInteractiveArea.style.height = `${maxy - miny}px`;
-          bigInteractiveArea.style.zIndex = "999";
-          document.body.appendChild(bigInteractiveArea);
+          // document.body.appendChild(bigInteractiveArea);
         } else {
           // Legacy format - single sentence
           let line = data?.sentence || data;
@@ -378,7 +396,16 @@ background: rgba(202, 12, 12, 0.692);
     textBox.style.top = `${y1}px`;
     textBox.style.width = `${x2 - x1}px`;
     textBox.style.height = `${y2 - y1}px`;
-    textBox.style.fontSize = `${fontSize}px`;
+    textBox.style.fontSize = '';
+    textBox.style.width = `${x2 - x1}px`;
+    textBox.style.height = `${y2 - y1}px`;
+    textBox.style.display = 'flex';
+    textBox.style.alignItems = 'center';
+    textBox.style.justifyContent = 'center';
+    textBox.style.overflow = 'hidden';
+    textBox.style.whiteSpace = 'nowrap';
+    textBox.style.fontSize = 'calc(min(100vw, 100vh) * 0.9)';
+    textBox.style.textOverflow = 'ellipsis';
 
     // Remove background if word-level
     if (noBackground) {
