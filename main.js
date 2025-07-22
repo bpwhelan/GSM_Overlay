@@ -14,7 +14,7 @@ if (fs.existsSync(settingsPath)) {
   try {
     const data = fs.readFileSync(settingsPath, "utf-8");
     oldUserSettings = JSON.parse(data)
-    userSettings = { ...userSettings, ...oldUserSettings}
+    userSettings = { ...userSettings, ...oldUserSettings }
 
   } catch (error) {
     console.error("Failed to load settings.json:", e)
@@ -24,7 +24,7 @@ if (fs.existsSync(settingsPath)) {
 
 app.whenReady().then(async () => {
   const isDev = !app.isPackaged;
-  const extPath = isDev ? path.join(__dirname, 'yomitan'): path.join(process.resourcesPath, "yomitan")
+  const extPath = isDev ? path.join(__dirname, 'yomitan') : path.join(process.resourcesPath, "yomitan")
   let ext;
   try {
     ext = await session.defaultSession.loadExtension(extPath, { allowFileAccess: true });
@@ -36,8 +36,8 @@ app.whenReady().then(async () => {
   const display = screen.getPrimaryDisplay()
 
   const win = new BrowserWindow({
-    x:0,
-    y:0,
+    x: 0,
+    y: 0,
     width: display.bounds.width,
     height: display.bounds.height,
     transparent: true,
@@ -67,23 +67,30 @@ app.whenReady().then(async () => {
 
   ipcMain.on("yomitan-event", (event, state) => {
     yomitanShown = state;
+    if (state) {
+      win.setIgnoreMouseEvents(false, { forward: true });
+      win.setAlwaysOnTop(true, 'screen-saver');
+    } else {
+      win.setIgnoreMouseEvents(true, { forward: true });
+      win.setAlwaysOnTop(false);
+    }
   })
 
   ipcMain.on('release-mouse', () => {
-  win.blur(); 
-  setTimeout(() => win.focus(), 50); 
-});
+    win.blur();
+    setTimeout(() => win.focus(), 50);
+  });
 
 
-// Fix for ghost title bar
-// https://github.com/electron/electron/issues/39959#issuecomment-1758736966
+  // Fix for ghost title bar
+  // https://github.com/electron/electron/issues/39959#issuecomment-1758736966
   win.on('blur', () => {
-  win.setBackgroundColor('#00000000')
-})
+    win.setBackgroundColor('#00000000')
+  })
 
-win.on('focus', () => {
-  win.setBackgroundColor('#00000000')
-})
+  win.on('focus', () => {
+    win.setBackgroundColor('#00000000')
+  })
 
   win.loadFile('index.html');
   if (isDev) {
@@ -94,8 +101,9 @@ win.on('focus', () => {
   }
   win.once('ready-to-show', () => {
     win.show();
+    win.openDevTools({ mode: 'detach' });
     win.webContents.send("load-settings", userSettings);
-    win.setAlwaysOnTop(true, 'dock');
+      win.setAlwaysOnTop(true, 'screen-saver');
   });
 
   ipcMain.on("app-close", () => {
@@ -148,7 +156,7 @@ win.on('focus', () => {
         },
       });
       settingsWin.removeMenu()
-      
+
       settingsWin.loadFile("settings.html");
       settingsWin.on("closed", () => {
         if (win && !win.isDestroyed()) {
@@ -164,8 +172,8 @@ win.on('focus', () => {
       ipcMain.on("websocket-closed", closedListenerFunction)
       ipcMain.on("websocket-opened", openedListenerFunction)
       console.log(websocketStates)
-      settingsWin.webContents.send("preload-settings", {settings, websocketStates})
-      
+      settingsWin.webContents.send("preload-settings", { settings, websocketStates })
+
       settingsWin.on("closed", () => {
         ipcMain.removeListener("websocket-closed", closedListenerFunction)
         ipcMain.removeListener("websocket-opened", openedListenerFunction)
@@ -186,9 +194,9 @@ win.on('focus', () => {
     userSettings.weburl2 = newurl;
     win.webContents.send("new-weburl2", newurl)
   })
-  
+
   ipcMain.on("text-recieved", (event, text) => {
-    win.setAlwaysOnTop(true, 'dock');
+      win.setAlwaysOnTop(true, 'screen-saver');
     // win.webContents.send("new-text", text);
   });
 

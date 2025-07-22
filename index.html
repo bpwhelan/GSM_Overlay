@@ -269,23 +269,63 @@ background: rgba(202, 12, 12, 0.692);
         console.log(data);
 
         // Check if data has words array (new word-level coordinate format)
-        if (data && data[0]?.words && Array.isArray(data[0]?.words)) {
-          // Handle word-level coordinates (array of sentences with words)
-          // Combine all sentences for the main box
-          const combinedSentence = data.map(item => item.sentence).join(' ');
-          console.log("Combined Sentence:", combinedSentence);
-          // document.getElementById("text").textContent = combinedSentence;
-          // Create individual word boxes with precise positioning and no background
-          textboxes = [];
-          data.forEach(item => {
-            if (Array.isArray(item.words)) {
-              item.words.forEach(wordData => {
-                const estimatedFontSize = estimateFontSize(wordData.word, wordData.x2 - wordData.x1, wordData.y2 - wordData.y1);
-                textboxes.push(createTextBox(wordData.word, wordData.x1, wordData.y1, wordData.x2, wordData.y2, estimatedFontSize, true, false, false));
-              });
-            }
+        if (Array.isArray(data) && data.every(item => item.text && item.bounding_rect)) {
+          // Handle array of {text, bounding_rect}
+          let bigInteractiveArea = document.createElement("div");
+          bigInteractiveArea.className = "text-box interactive";
+          let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+          data.forEach(line => {
+            x1 = line.bounding_rect.x1 - 10;
+            y1 = line.bounding_rect.y1 - 10;
+            x2 = line.bounding_rect.x3 + 10;
+            y2 = line.bounding_rect.y3 + 10;
+            let div = document.createElement("div");
+            div.className = "text-box interactive";
+            div.style.left = `${x1}px`;
+            div.style.top = `${y1}px`;
+            div.style.width = `${x2 - x1}px`;
+            div.style.height = `${y2 - y1}px`;
+            div.style.fontSize = `${estimateFontSize(line.text, x2 - x1, y2 - y1)}px`;
+            div.textContent = line.text[0] == '\n' ? line.text.slice(1) : line.text;
+            line.words.forEach(word => {
+              const rect = word.bounding_rect;
+              // Estimate Font size with avg bounding box
+              const fontSize = estimateFontSize(word.text, rect.x3 - rect.x1, rect.y3 - rect.y1);
+              const box = createTextBox(word.text, rect.x1, rect.y1, rect.x3, rect.y3, fontSize, true, false, false);
+              document.body.appendChild(box);
+              // div.appendChild(box);
+            });
+            // document.body.appendChild(div);
+            // const rect = line.bounding_rect;
+            // // Estimate Font size with avg bounding box
+            // let avg_width = 0;
+            // let avg_height = 0;
+            // for (const word of line.words) {
+            //   const wordRect = word.bounding_rect;
+            //   avg_width += wordRect.x3 - wordRect.x1;
+            //   avg_height += wordRect.y3 - wordRect.y1;
+            // }
+            // console.log(`Average width: ${avg_width / line.words.length}, Average height: ${avg_height / line.words.length}`);
+            // const fontSize = estimateFontSize(1, avg_width / line.words.length, avg_height / line.words.length);
+            // console.log(`Estimated font size for "${line.text}": ${fontSize}px`);
+            // const box = createTextBox(line.text, rect.x1, rect.y1, rect.x3, rect.y3, fontSize, false, false, false);
+            // document.body.appendChild(box);
+            minx = Math.min(minx, x1);
+            miny = Math.min(miny, y1);
+            maxx = Math.max(maxx, x2);
+            maxy = Math.max(maxy, y2);
           });
-          textboxes.forEach(box => document.body.appendChild(box));
+          minx -= 50;
+          miny -= 50;
+          maxx += 50;
+          maxy += 50;
+          bigInteractiveArea.style.position = "absolute";
+          bigInteractiveArea.style.left = `${minx}px`;
+          bigInteractiveArea.style.top = `${miny}px`;
+          bigInteractiveArea.style.width = `${maxx - minx}px`;
+          bigInteractiveArea.style.height = `${maxy - miny}px`;
+          bigInteractiveArea.style.zIndex = "999";
+          document.body.appendChild(bigInteractiveArea);
         } else {
           // Legacy format - single sentence
           let line = data?.sentence || data;
@@ -329,7 +369,7 @@ background: rgba(202, 12, 12, 0.692);
   // Function to create individual text boxes at specified coordinates
   function createTextBox(sentence, x1, y1, x2, y2, fontSize, noBackground = false, transparentText = false, verticalText = false) {
     console.log(`Creating box for "${sentence}" at (${x1}, ${y1}) to (${x2}, ${y2}) with font size ${fontSize}`);
-    const textBox = document.createElement('div');
+    const textBox = document.createElement('span');
     textBox.className = 'text-box interactive';
     textBox.textContent = sentence[0] == '\n' ? sentence.slice(1) : sentence;
 
