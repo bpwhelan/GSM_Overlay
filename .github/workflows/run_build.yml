@@ -26,12 +26,8 @@ jobs:
       - name: Package Electron app
         run: npm run package
 
-      - name: Zip packaged output
-        run: |
-          powershell Compress-Archive -Path out/* -DestinationPath out.zip
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: transparent-texthooker-overlay
-          path: out.zip
+          path: out/
