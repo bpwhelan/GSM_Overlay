@@ -214,26 +214,28 @@ app.whenReady().then(async () => {
     win.webContents.send("new-weburl2", newurl)
   })
 
-  let alwaysOnTopInterval;
+  // let alwaysOnTopInterval;
 
   ipcMain.on("text-recieved", (event, text) => {
+    win.show();
     win.setAlwaysOnTop(true, 'screen-saver');
-    if (!alwaysOnTopInterval) {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // if (!alwaysOnTopInterval) {
       // This is necessary to keep the window always on top
       // It seems that sometimes the window loses its always-on-top status
       // and this interval helps to restore it
-      alwaysOnTopInterval = setInterval(() => {
-        try {
-          win?.setAlwaysOnTop(true, 'screen-saver');
-        } catch (error) {
-          console.error("Error setting always on top, maybe app is closing:", error);
-        }
-      }, 100);
-    }
+      // alwaysOnTopInterval = setInterval(() => {
+      //   try {
+      //     win?.setAlwaysOnTop(true, 'screen-saver');
+      //   } catch (error) {
+      //     console.error("Error setting always on top, maybe app is closing:", error);
+      //   }
+      // }, 100);
+    // }
   });
 
   app.on("before-quit", () => {
-    clearInterval(alwaysOnTopInterval);
+    // clearInterval(alwaysOnTopInterval);
     fs.writeFileSync(settingsPath, JSON.stringify(userSettings, null, 2))
   });
 });

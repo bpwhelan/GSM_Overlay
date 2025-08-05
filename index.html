@@ -306,12 +306,7 @@ background: rgba(202, 12, 12, 0.692);
             // div.style.fontSize = `${estimateFontSize(line.text, x2 - x1, y2 - y1)}px`;
             // div.textContent = line.text[0] == '\n' ? line.text.slice(1) : line.text;
             // div.style.background = 'rgba(0,0,0,0)';
-            line.words.forEach(word => {
-              const rect = word.bounding_rect;
-              // Estimate Font size with avg bounding box
-              const fontSize = estimateFontSize(word.text, rect.x3 - rect.x1, rect.y3 - rect.y1);
-              const box = createTextBox(word.text, rect.x1, rect.y1, rect.x3, rect.y3, fontSize, true, true, false);
-              if (!/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/.test(word.text)) {
+            if (!/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/.test(line.text)) {
                 // Not Japanese, Chinese, or Korean: add a spacer span after each box
                 const spacer = document.createElement('span');
                 spacer.textContent = ' ';
@@ -319,6 +314,11 @@ background: rgba(202, 12, 12, 0.692);
                 spacer.style.width = '0.5em';
                 document.body.appendChild(spacer);
               }
+            line.words.forEach(word => {
+              const rect = word.bounding_rect;
+              // Estimate Font size with avg bounding box
+              const fontSize = estimateFontSize(word.text, rect.x3 - rect.x1, rect.y3 - rect.y1);
+              const box = createTextBox(word.text, rect.x1, rect.y1, rect.x3, rect.y3, fontSize, true, true, false);
               document.body.appendChild(box);
               // div.appendChild(box);
             });
@@ -342,10 +342,10 @@ background: rgba(202, 12, 12, 0.692);
             maxx = Math.max(maxx, x2);
             maxy = Math.max(maxy, y2);
           });
-          minx -= 50;
-          miny -= 50;
-          maxx += 50;
-          maxy += 50;
+          minx -= 100;
+          miny -= 100;
+          maxx += 100;
+          maxy += 100;
           bigInteractiveArea.style.position = "absolute";
           bigInteractiveArea.style.left = `${minx}px`;
           bigInteractiveArea.style.top = `${miny}px`;
