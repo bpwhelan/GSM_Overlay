@@ -504,6 +504,7 @@ background: rgba(202, 12, 12, 0.692);
   document.getElementById("btn-yomitan").addEventListener("click", () => {
     ipcRenderer.send("open-yomitan-settings");
   });
+  
   ipcRenderer.on("load-settings", (event, newsettings) => {
     textEl.style.fontSize = `${newsettings.fontSize}px`;
     setupWebSocket(newsettings.weburl1, true)

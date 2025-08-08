@@ -302,7 +302,8 @@ export class TextScanner extends EventDispatcher {
             this._scanResolution = scanResolution;
         }
         if (typeof sentenceParsingOptions === 'object' && sentenceParsingOptions !== null) {
-            const {scanExtent, terminationCharacterMode, terminationCharacters} = sentenceParsingOptions;
+            let {scanExtent, terminationCharacterMode, terminationCharacters} = sentenceParsingOptions;
+            terminationCharacterMode = "newlines" // force to newlines to get everything
             if (typeof scanExtent === 'number') {
                 this._sentenceScanExtent = scanExtent;
             }

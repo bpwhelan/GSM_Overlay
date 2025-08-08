@@ -65,3 +65,14 @@ export function getAllPermissions() {
             this._layoutAwareScan = false; // force layoutAwareScan to false due weird behavior
         }
 ```
+
+## Update `GSM_Overlay/yomitan/js/language/text-scanner.js` to force terminationCharacterMode to "newlines" to get everything
+
+```javascript
+        if (typeof sentenceParsingOptions === 'object' && sentenceParsingOptions !== null) {
+            let {scanExtent, terminationCharacterMode, terminationCharacters} = sentenceParsingOptions;
+            terminationCharacterMode = "newlines" // force to newlines to get everything
+            if (typeof scanExtent === 'number') {
+                this._sentenceScanExtent = scanExtent;
+            }
+```

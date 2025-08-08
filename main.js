@@ -43,6 +43,12 @@ app.whenReady().then(async () => {
     }
   });
 
+  globalShortcut.register('Alt+Shift+J', () => {
+    if (win) {
+      win.minimize();
+    }
+  });
+
   // Unregister shortcuts on quit
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
@@ -82,6 +88,7 @@ app.whenReady().then(async () => {
     resizeMode = state;
   })
 
+
   ipcMain.on("yomitan-event", (event, state) => {
     yomitanShown = state;
     if (state) {
@@ -89,7 +96,8 @@ app.whenReady().then(async () => {
       win.setAlwaysOnTop(true, 'screen-saver');
     } else {
       win.setIgnoreMouseEvents(true, { forward: true });
-      win.setAlwaysOnTop(false);
+      win.setAlwaysOnTop(true, 'screen-saver');
+      win.blur();
     }
   })
 
@@ -233,16 +241,16 @@ app.whenReady().then(async () => {
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     // if (!alwaysOnTopInterval) {
-      // This is necessary to keep the window always on top
-      // It seems that sometimes the window loses its always-on-top status
-      // and this interval helps to restore it
-      // alwaysOnTopInterval = setInterval(() => {
-      //   try {
-      //     win?.setAlwaysOnTop(true, 'screen-saver');
-      //   } catch (error) {
-      //     console.error("Error setting always on top, maybe app is closing:", error);
-      //   }
-      // }, 100);
+    // This is necessary to keep the window always on top
+    // It seems that sometimes the window loses its always-on-top status
+    // and this interval helps to restore it
+    // alwaysOnTopInterval = setInterval(() => {
+    //   try {
+    //     win?.setAlwaysOnTop(true, 'screen-saver');
+    //   } catch (error) {
+    //     console.error("Error setting always on top, maybe app is closing:", error);
+    //   }
+    // }, 100);
     // }
   });
 
