@@ -7,7 +7,8 @@ const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 let userSettings = {
   "fontSize": 42,
   "weburl1": "ws://localhost:55002",
-  "weburl2": "ws://localhost:55499"
+  "weburl2": "ws://localhost:55499",
+  "hideOnStartup": false
 };
 
 if (fs.existsSync(settingsPath)) {
@@ -144,6 +145,13 @@ app.whenReady().then(async () => {
 
     yomitanOptionsWin.removeMenu()
     yomitanOptionsWin.loadURL(`chrome-extension://${ext.id}/settings.html`);
+    // Allow search ctrl F in the settings window
+    yomitanOptionsWin.webContents.on('before-input-event', (event, input) => {
+      if (input.key.toLowerCase() === 'f' && input.control) {
+        yomitanOptionsWin.webContents.send('focus-search');
+        event.preventDefault();
+      }
+    });
   });
 
   let websocketStates = {
@@ -212,6 +220,10 @@ app.whenReady().then(async () => {
   ipcMain.on("weburl2-changed", (event, newurl) => {
     userSettings.weburl2 = newurl;
     win.webContents.send("new-weburl2", newurl)
+  })
+  ipcMain.on("hideonstartup-changed", (event, newValue) => {
+    userSettings.hideOnStartup = newValue;
+    win.webContents.send("new-hideonstartup", newValue);
   })
 
   // let alwaysOnTopInterval;

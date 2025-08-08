@@ -756,7 +756,7 @@
                                     },
                                     "layoutAwareScan": {
                                         "type": "boolean",
-                                        "default": true
+                                        "default": false
                                     },
                                     "matchTypePrefix": {
                                         "type": "boolean",

@@ -287,7 +287,7 @@ export class TextScanner extends EventDispatcher {
             this._scanLength = scanLength;
         }
         if (typeof layoutAwareScan === 'boolean') {
-            this._layoutAwareScan = layoutAwareScan;
+            this._layoutAwareScan = false; // force layoutAwareScan to false due weird behavior
         }
         if (typeof preventMiddleMouse === 'boolean') {
             this._preventMiddleMouse = preventMiddleMouse;

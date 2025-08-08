@@ -175,7 +175,7 @@ background: rgba(202, 12, 12, 0.692);
       <button class="control-btn" id="btn-minimize">➖</button>
       <button class="control-btn" id="btn-close">✖</button>
     </div>
-    <div id="text" class="interactive">Waiting for Webhook</div>
+    <div id="text" class="interactive">Hide this box with Alt+Shift+H</div>
     <div draggable="false" id="resize-handle" class="interactive half-interactive"></div>
   </div>
   <div id="text-box-container" class="text-box-container interactive"></div>
@@ -508,6 +508,12 @@ background: rgba(202, 12, 12, 0.692);
     textEl.style.fontSize = `${newsettings.fontSize}px`;
     setupWebSocket(newsettings.weburl1, true)
     setupWebSocket(newsettings.weburl2, false)
+    window.hideOnStartup = newsettings.hideOnStartup;
+    if (newsettings.hideOnStartup) {
+      mainBox.style.display = "none";
+    } else {
+      mainBox.style.display = "";
+    }
   })
 
   ipcRenderer.on("new-fontsize", (event, newsize) => {
@@ -534,7 +540,8 @@ background: rgba(202, 12, 12, 0.692);
     const fontSize = parseInt(textEl.style.fontSize, 10);
     const weburl1 = window.ws1 ? window.ws1.url : null;
     const weburl2 = window.ws2 ? window.ws2.url : null;
-    ipcRenderer.send("reply-current-settings", { fontSize, weburl1, weburl2 });
+    const hideOnStartup = window.hideOnStartup;
+    ipcRenderer.send("reply-current-settings", { fontSize, weburl1, weburl2, hideOnStartup });
   })
 
   ipcRenderer.on('toggle-main-box', () => {
