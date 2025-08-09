@@ -18,7 +18,7 @@ background: rgba(202, 12, 12, 0.692);
   } */
 
   body {
-    overflow:hidden;
+    overflow: hidden;
   }
 
 
@@ -237,6 +237,8 @@ background: rgba(202, 12, 12, 0.692);
 
   let isDragging = false;
   let offsetX, offsetY;
+  let magpieCompatibility = false;
+  let hideOnStartup = false;
 
   dragBar.addEventListener("mousedown", (e) => {
     const rect = mainBox.getBoundingClientRect();
@@ -295,15 +297,10 @@ background: rgba(202, 12, 12, 0.692);
         // Check if data has words array (new word-level coordinate format)
         if (Array.isArray(data) && data.every(item => item.text && item.bounding_rect)) {
           // Handle array of {text, bounding_rect}
-          let bigInteractiveArea = document.getElementById("text-box-container");
-          bigInteractiveArea.innerHTML = ""; // Clear previous content
-          bigInteractiveArea.className = "text-box-container interactive";
-          let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
           data.forEach(line => {
-            x1 = line.bounding_rect.x1 - 10;
-            y1 = line.bounding_rect.y1 - 10;
-            x2 = line.bounding_rect.x3 + 10;
-            y2 = line.bounding_rect.y3 + 10;
+            let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+            let bigInteractiveArea = document.createElement("div");
+            bigInteractiveArea.className = "big-interactive-area interactive";
             // let div = document.createElement("div");
             // div.className = "text-box interactive";
             // div.style.left = `${x1}px`;
@@ -314,15 +311,19 @@ background: rgba(202, 12, 12, 0.692);
             // div.textContent = line.text[0] == '\n' ? line.text.slice(1) : line.text;
             // div.style.background = 'rgba(0,0,0,0)';
             if (!/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/.test(line.text)) {
-                // Not Japanese, Chinese, or Korean: add a spacer span after each box
-                const spacer = document.createElement('span');
-                spacer.textContent = ' ';
-                spacer.style.display = 'inline-block';
-                spacer.style.width = '0.5em';
-                document.body.appendChild(spacer);
-              }
+              // Not Japanese, Chinese, or Korean: add a spacer span after each box
+              const spacer = document.createElement('span');
+              spacer.textContent = ' ';
+              spacer.style.display = 'inline-block';
+              spacer.style.width = '0.5em';
+              document.body.appendChild(spacer);
+            }
             line.words.forEach(word => {
               const rect = word.bounding_rect;
+              minx = Math.min(minx, rect.x1);
+              miny = Math.min(miny, rect.y1);
+              maxx = Math.max(maxx, rect.x3);
+              maxy = Math.max(maxy, rect.y3);
               // Estimate Font size with avg bounding box
               const fontSize = estimateFontSize(word.text, rect.x3 - rect.x1, rect.y3 - rect.y1);
               const box = createTextBox(word.text, rect.x1, rect.y1, rect.x3, rect.y3, fontSize, true, true, false);
@@ -345,20 +346,25 @@ background: rgba(202, 12, 12, 0.692);
             // console.log(`Estimated font size for "${line.text}": ${fontSize}px`);
             // const box = createTextBox(line.text, rect.x1, rect.y1, rect.x3, rect.y3, fontSize, false, false, false);
             // document.body.appendChild(box);
-            minx = Math.min(minx, x1);
-            miny = Math.min(miny, y1);
-            maxx = Math.max(maxx, x2);
-            maxy = Math.max(maxy, y2);
+            if (magpieCompatibility) {
+              minx -= 150;
+              miny -= 150;
+              maxx += 150;
+              maxy += 150;
+            } else {
+              minx -= 10;
+              miny -= 10;
+              maxx += 10;
+              maxy += 10;
+            }
+            bigInteractiveArea.style.position = "absolute";
+            bigInteractiveArea.style.left = `${minx}px`;
+            bigInteractiveArea.style.top = `${miny}px`;
+            bigInteractiveArea.style.width = `${maxx - minx}px`;
+            bigInteractiveArea.style.height = `${maxy - miny}px`;
+            document.body.appendChild(bigInteractiveArea);
           });
-          minx -= 100;
-          miny -= 100;
-          maxx += 100;
-          maxy += 100;
-          bigInteractiveArea.style.position = "absolute";
-          bigInteractiveArea.style.left = `${minx}px`;
-          bigInteractiveArea.style.top = `${miny}px`;
-          bigInteractiveArea.style.width = `${maxx - minx}px`;
-          bigInteractiveArea.style.height = `${maxy - miny}px`;
+
           // document.body.appendChild(bigInteractiveArea);
         } else {
           // Legacy format - single sentence
@@ -473,6 +479,8 @@ background: rgba(202, 12, 12, 0.692);
   function clearTextBoxes() {
     const existingBoxes = document.querySelectorAll('.text-box');
     existingBoxes.forEach(box => box.remove());
+    const bigAreas = document.querySelectorAll('.big-interactive-area');
+    bigAreas.forEach(area => area.remove());
   }
 
   let resizeMode = false;
@@ -504,13 +512,21 @@ background: rgba(202, 12, 12, 0.692);
   document.getElementById("btn-yomitan").addEventListener("click", () => {
     ipcRenderer.send("open-yomitan-settings");
   });
-  
+
+  // If anywhere but ".interactive" and ".yomitan-popup" is left clicked or right clicked, ignore mouse events, and let it go through
+  // document.addEventListener("mousedown", (event) => {
+  //   if (!event.target.closest(".interactive") && !event.target.closest(".yomitan-popup")) {
+  //     ipcRenderer.send("set-ignore-mouse-events", true, { forward: true });
+  //   }
+  // });
+
   ipcRenderer.on("load-settings", (event, newsettings) => {
     textEl.style.fontSize = `${newsettings.fontSize}px`;
     setupWebSocket(newsettings.weburl1, true)
     setupWebSocket(newsettings.weburl2, false)
-    window.hideOnStartup = newsettings.hideOnStartup;
-    if (newsettings.hideOnStartup) {
+    hideOnStartup = newsettings.hideOnStartup;
+    magpieCompatibility = newsettings.magpieCompatibility;
+    if (hideOnStartup) {
       mainBox.style.display = "none";
     } else {
       mainBox.style.display = "";
@@ -527,6 +543,32 @@ background: rgba(202, 12, 12, 0.692);
   ipcRenderer.on("new-weburl2", (event, newurl) => {
     setupWebSocket(newurl, false)
   })
+  ipcRenderer.on("new-hideonstartup", (event, newValue) => {
+    hideOnStartup = newValue;
+  })
+  ipcRenderer.on("new-magpieCompatibility", (event, newValue) => {
+    magpieCompatibility = newValue;
+    console.log("Magpie compatibility changed to:", magpieCompatibility);
+    // Update any UI elements or settings related to magpieCompatibility
+    const bigInteractiveAreas = document.querySelectorAll('.big-interactive-area');
+    bigInteractiveAreas.forEach(area => {
+      const left = parseFloat(area.style.left) || 0;
+      const top = parseFloat(area.style.top) || 0;
+      const width = parseFloat(area.style.width) || 0;
+      const height = parseFloat(area.style.height) || 0;
+      if (magpieCompatibility) {
+        area.style.left = (left - 100) + 'px';
+        area.style.top = (top - 100) + 'px';
+        area.style.width = (width + 200) + 'px';
+        area.style.height = (height + 200) + 'px';
+      } else {
+        area.style.left = (left + 100 - 10) + 'px';
+        area.style.top = (top + 100 - 10) + 'px';
+        area.style.width = (width - 200 + 20) + 'px';
+        area.style.height = (height - 200 + 20) + 'px';
+      }
+    });
+  })
 
   ipcRenderer.on("force-visible", (event, value) => {
     if (!pinned) {
@@ -541,8 +583,7 @@ background: rgba(202, 12, 12, 0.692);
     const fontSize = parseInt(textEl.style.fontSize, 10);
     const weburl1 = window.ws1 ? window.ws1.url : null;
     const weburl2 = window.ws2 ? window.ws2.url : null;
-    const hideOnStartup = window.hideOnStartup;
-    ipcRenderer.send("reply-current-settings", { fontSize, weburl1, weburl2, hideOnStartup });
+    ipcRenderer.send("reply-current-settings", { fontSize, weburl1, weburl2, hideOnStartup, magpieCompatibility });
   })
 
   ipcRenderer.on('toggle-main-box', () => {

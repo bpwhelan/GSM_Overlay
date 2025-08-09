@@ -8,7 +8,8 @@ let userSettings = {
   "fontSize": 42,
   "weburl1": "ws://localhost:55002",
   "weburl2": "ws://localhost:55499",
-  "hideOnStartup": false
+  "hideOnStartup": false,
+  "magpieCompatibility": false
 };
 
 if (fs.existsSync(settingsPath)) {
@@ -80,6 +81,7 @@ app.whenReady().then(async () => {
   let resizeMode = false;
   let yomitanShown = false;
   ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
+    console.log("set-ignore-mouse-events", ignore, options, resizeMode, yomitanShown);
     if (!resizeMode && !yomitanShown) {
       win.setIgnoreMouseEvents(ignore, options)
     }
@@ -232,6 +234,10 @@ app.whenReady().then(async () => {
   ipcMain.on("hideonstartup-changed", (event, newValue) => {
     userSettings.hideOnStartup = newValue;
     win.webContents.send("new-hideonstartup", newValue);
+  })
+  ipcMain.on("magpieCompatibility-changed", (event, newValue) => {
+    userSettings.magpieCompatibility = newValue;
+    win.webContents.send("new-magpieCompatibility", newValue);
   })
 
   // let alwaysOnTopInterval;

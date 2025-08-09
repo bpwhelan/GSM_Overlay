@@ -35,6 +35,10 @@
     <input type="checkbox" id="hideOnStartup" />
   </label>
 
+  <label>Enable Magpie Compatibility (Experimental)
+    <input type="checkbox" id="magpieCompatibility" />
+  </label>
+
   <script>
     const { ipcRenderer } = require("electron");
     document.getElementById("fontSize").addEventListener("input", (event) => {
@@ -50,14 +54,18 @@
     document.getElementById("hideOnStartup").addEventListener("change", (event) => {
       ipcRenderer.send("hideonstartup-changed", event.target.checked)
     })
+    document.getElementById("magpieCompatibility").addEventListener("change", (event) => {
+      ipcRenderer.send("magpieCompatibility-changed", event.target.checked)
+    })
     ipcRenderer.on("preload-settings", (event, {settings, websocketStates}) => {
-      const {fontSize, weburl1, weburl2, hideOnStartup} = settings;
+      const {fontSize, weburl1, weburl2, hideOnStartup, magpieCompatibility} = settings;
       document.getElementById("fontSize").value = fontSize;
       document.getElementById("wsUrl1").value = weburl1;
       document.getElementById("wsUrl2").value = weburl2;
       document.getElementById("wsstatus1").style.backgroundColor = websocketStates.ws1 ? "green" : "red"
       document.getElementById("wsstatus2").style.backgroundColor = websocketStates.ws2 ? "green" : "red"
       document.getElementById("hideOnStartup").checked = hideOnStartup;
+      document.getElementById("magpieCompatibility").checked = magpieCompatibility;
     })
     ipcRenderer.on("websocket-closed", (event, type) => {
       if (type == "ws1") {
