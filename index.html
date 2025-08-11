@@ -300,7 +300,7 @@ background: rgba(202, 12, 12, 0.692);
           data.forEach(line => {
             let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
             let bigInteractiveArea = document.createElement("div");
-            bigInteractiveArea.className = "big-interactive-area interactive";
+            bigInteractiveArea.className = "big-interactive-area interactive half-interactive";
             // let div = document.createElement("div");
             // div.className = "text-box interactive";
             // div.style.left = `${x1}px`;
@@ -347,10 +347,10 @@ background: rgba(202, 12, 12, 0.692);
             // const box = createTextBox(line.text, rect.x1, rect.y1, rect.x3, rect.y3, fontSize, false, false, false);
             // document.body.appendChild(box);
             if (magpieCompatibility) {
-              minx -= 150;
-              miny -= 150;
-              maxx += 150;
-              maxy += 150;
+              minx -= 100;
+              miny -= 100;
+              maxx += 100;
+              maxy += 100;
             } else {
               minx -= 10;
               miny -= 10;
@@ -455,6 +455,7 @@ background: rgba(202, 12, 12, 0.692);
 
   function setMouseEventHandlers() {
     const interactiveElements = document.querySelectorAll('.interactive');
+    const halfInteractiveElements = document.querySelectorAll('.half-interactive');
     const textBoxElements = document.querySelectorAll('.text-box');
     let isMouseOverInteractiveElement = false;
 
@@ -471,7 +472,15 @@ background: rgba(202, 12, 12, 0.692);
           ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
         });
       }
+    });
 
+    halfInteractiveElements.forEach((element) => {
+      if (!element.classList.contains("interactive")) {
+        element.addEventListener('mouseenter', () => {
+          isMouseOverInteractiveElement = true;
+          ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
+        });
+      }
     });
   }
 

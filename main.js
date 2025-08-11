@@ -99,7 +99,7 @@ app.whenReady().then(async () => {
     } else {
       win.setIgnoreMouseEvents(true, { forward: true });
       win.setAlwaysOnTop(true, 'screen-saver');
-      win.blur();
+      // win.blur();
     }
   })
 
