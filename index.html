@@ -184,18 +184,19 @@ background: rgba(202, 12, 12, 0.692);
 
 
 <script>
+  let yomitanShowing = false;
   window.addEventListener('yomitan-popup-shown', (event) => {
     ipcRenderer.send('yomitan-event', true);
+    yomitanShowing = true;
   });
 
   // When popup is hidden, tell main process to ignore mouse events again
   window.addEventListener('yomitan-popup-hidden', (event) => {
     ipcRenderer.send('yomitan-event', false);
     ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
+    yomitanShowing = false;
   });
-</script>
 
-<script>
   const textElement = document.getElementById("text");
   const handle = document.getElementById("resize-handle");
 
@@ -523,11 +524,11 @@ background: rgba(202, 12, 12, 0.692);
   });
 
   // If anywhere but ".interactive" and ".yomitan-popup" is left clicked or right clicked, ignore mouse events, and let it go through
-  // document.addEventListener("mousedown", (event) => {
-  //   if (!event.target.closest(".interactive") && !event.target.closest(".yomitan-popup")) {
-  //     ipcRenderer.send("set-ignore-mouse-events", true, { forward: true });
-  //   }
-  // });
+  document.addEventListener("mousedown", (event) => {
+    if (!event.target.closest(".interactive") && !event.target.closest(".yomitan-popup") && !yomitanShowing) {
+      ipcRenderer.send("set-ignore-mouse-events", true, { forward: true });
+    }
+  });
 
   ipcRenderer.on("load-settings", (event, newsettings) => {
     textEl.style.fontSize = `${newsettings.fontSize}px`;
