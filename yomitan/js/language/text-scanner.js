@@ -1452,7 +1452,7 @@ export class TextScanner extends EventDispatcher {
         const modifiersSet = new Set(modifiers);
         for (let i = 0, ii = this._inputs.length; i < ii; ++i) {
             const input = this._inputs[i];
-            const {include, exclude, types} = input;
+            let {include, exclude, types} = input;
             if (!types.has(pointerType)) { continue; }
             if (this._setHasAll(modifiersSet, include) && (exclude.length === 0 || !this._setHasAll(modifiersSet, exclude))) {
                 if (include.length > 0) {
@@ -1505,8 +1505,8 @@ export class TextScanner extends EventDispatcher {
     _convertInput(input) {
         const {options} = input;
         return {
-            include: this._getInputArray(input.include),
-            exclude: this._getInputArray(input.exclude),
+            include: [],
+            exclude: [],
             types: this._getInputTypeSet(input.types),
             searchTerms: this._getInputBoolean(options.searchTerms),
             searchKanji: this._getInputBoolean(options.searchKanji),

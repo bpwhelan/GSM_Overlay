@@ -401,9 +401,10 @@ export class Frontend {
     /** */
     _onSearchEmpty() {
         const scanningOptions = /** @type {import('settings').ProfileOptions} */ (this._options).scanning;
-        if (scanningOptions.autoHideResults) {
+        // FORCE this option for overlay
+        // if (scanningOptions.autoHideResults) {
             this._clearSelectionDelayed(scanningOptions.hideDelay, false, false);
-        }
+        // }
     }
 
     /**

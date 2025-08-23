@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require('path');
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+let ext;
 let userSettings = {
   "fontSize": 42,
   "weburl1": "ws://localhost:55002",
@@ -24,10 +25,29 @@ if (fs.existsSync(settingsPath)) {
   }
 }
 
+function openYomitanSettings() {
+  const yomitanOptionsWin = new BrowserWindow({
+      width: 1100,
+      height: 600,
+      webPreferences: {
+        nodeIntegration: false
+      }
+    });
+
+    yomitanOptionsWin.removeMenu()
+    yomitanOptionsWin.loadURL(`chrome-extension://${ext.id}/settings.html`);
+    // Allow search ctrl F in the settings window
+    yomitanOptionsWin.webContents.on('before-input-event', (event, input) => {
+      if (input.key.toLowerCase() === 'f' && input.control) {
+        yomitanOptionsWin.webContents.send('focus-search');
+        event.preventDefault();
+      }
+    });
+}
+
 app.whenReady().then(async () => {
   const isDev = !app.isPackaged;
   const extPath = isDev ? path.join(__dirname, 'yomitan') : path.join(process.resourcesPath, "yomitan")
-  let ext;
   try {
     ext = await session.defaultSession.loadExtension(extPath, { allowFileAccess: true });
     console.log('Yomitan extension loaded.');
@@ -50,18 +70,23 @@ app.whenReady().then(async () => {
     }
   });
 
+  globalShortcut.register('Alt+Shift+Y', () => {
+    openYomitanSettings();
+  });
+
   // Unregister shortcuts on quit
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
   });
 
   const display = screen.getPrimaryDisplay()
+  const workArea = display.workArea
 
   const win = new BrowserWindow({
-    x: 0,
-    y: 0,
-    width: display.bounds.width,
-    height: display.bounds.height,
+    x: workArea.x,
+    y: workArea.y,
+    width: workArea.width + 1,
+    height: workArea.height + 1,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
@@ -86,6 +111,17 @@ app.whenReady().then(async () => {
       win.setIgnoreMouseEvents(ignore, options)
     }
   })
+
+  ipcMain.on("hide", (event, state) => {
+    win.minimize();
+  });
+
+  ipcMain.on("show", (event, state) => {
+    win.show();
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  });
+
   ipcMain.on("resize-mode", (event, state) => {
     resizeMode = state;
   })
@@ -145,23 +181,7 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.on("open-yomitan-settings", () => {
-    const yomitanOptionsWin = new BrowserWindow({
-      width: 1100,
-      height: 600,
-      webPreferences: {
-        nodeIntegration: false
-      }
-    });
-
-    yomitanOptionsWin.removeMenu()
-    yomitanOptionsWin.loadURL(`chrome-extension://${ext.id}/settings.html`);
-    // Allow search ctrl F in the settings window
-    yomitanOptionsWin.webContents.on('before-input-event', (event, input) => {
-      if (input.key.toLowerCase() === 'f' && input.control) {
-        yomitanOptionsWin.webContents.send('focus-search');
-        event.preventDefault();
-      }
-    });
+    openYomitanSettings();
   });
 
   let websocketStates = {

@@ -55,7 +55,7 @@ background: rgba(202, 12, 12, 0.692);
     display: block;
     align-items: center;
     justify-content: flex-start;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .text-box-container {
@@ -71,7 +71,7 @@ background: rgba(202, 12, 12, 0.692);
     display: block;
     align-items: center;
     justify-content: flex-start;
-    overflow: hidden;
+    overflow: visible;
   }
 
   body.force-visible .text-box,
@@ -154,6 +154,11 @@ background: rgba(202, 12, 12, 0.692);
   #btn-pin {
     color: #ddd2d2a3;
   }
+
+  /* .big-interactive-area:hover {
+    background: rgba(15, 15, 15, 0.1);
+  } */
+
 </style>
 
 <html>
@@ -185,9 +190,32 @@ background: rgba(202, 12, 12, 0.692);
 
 <script>
   let yomitanShowing = false;
+  let autoHide = null;
+  let currentX = 0;
+  let currentY = 0;
+
+  window.addEventListener('mousemove', (e) => {
+    currentX = e.clientX;
+    currentY = e.clientY;
+  });
+
+  function attemptAutoHide() {
+    console.log("Attempting to hide yomitan popup automatically")
+    const elementAtPoint = document.elementFromPoint(currentX, currentY);
+    if (elementAtPoint && (elementAtPoint.classList.contains('interactive') || elementAtPoint.classList.contains('yomitan-popup'))) {
+      // Mouse is over an interactive element, do nothing
+      return;
+    }
+    // Mouse is not over an interactive element, hide all yomitan popups, include shadow roots
+    dispatchEvent(new CustomEvent("yomitan-popup-hide"));
+  };
+
   window.addEventListener('yomitan-popup-shown', (event) => {
+    console.log('Yomitan popup shown:', event);
+    console.log(event.detail); // This will log the value of 'this' passed above
     ipcRenderer.send('yomitan-event', true);
     yomitanShowing = true;
+    autoHide = setTimeout(attemptAutoHide, 3000); // Auto-hide after 3 seconds
   });
 
   // When popup is hidden, tell main process to ignore mouse events again
@@ -195,6 +223,10 @@ background: rgba(202, 12, 12, 0.692);
     ipcRenderer.send('yomitan-event', false);
     ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
     yomitanShowing = false;
+    if (autoHide) {
+      clearTimeout(autoHide);
+      autoHide = null;
+    }
   });
 
   const textElement = document.getElementById("text");
@@ -240,6 +272,8 @@ background: rgba(202, 12, 12, 0.692);
   let offsetX, offsetY;
   let magpieCompatibility = false;
   let hideOnStartup = false;
+  let usePercentage = false;
+  let unHoverTimer = null;
 
   dragBar.addEventListener("mousedown", (e) => {
     const rect = mainBox.getBoundingClientRect();
@@ -299,6 +333,9 @@ background: rgba(202, 12, 12, 0.692);
         if (Array.isArray(data) && data.every(item => item.text && item.bounding_rect)) {
           // Handle array of {text, bounding_rect}
           data.forEach(line => {
+            const rect = line.bounding_rect;
+            // Check if coordinates are percentages (<1)
+            usePercentage = rect.x1 < 1 && rect.y1 < 1 && rect.x3 < 1 && rect.y3 < 1;
             let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
             let bigInteractiveArea = document.createElement("div");
             bigInteractiveArea.className = "big-interactive-area interactive half-interactive";
@@ -321,14 +358,19 @@ background: rgba(202, 12, 12, 0.692);
             }
             line.words.forEach(word => {
               const rect = word.bounding_rect;
-              minx = Math.min(minx, rect.x1);
-              miny = Math.min(miny, rect.y1);
-              maxx = Math.max(maxx, rect.x3);
-              maxy = Math.max(maxy, rect.y3);
-              // Estimate Font size with avg bounding box
-              const fontSize = estimateFontSize(word.text, rect.x3 - rect.x1, rect.y3 - rect.y1);
-              const box = createTextBox(word.text, rect.x1, rect.y1, rect.x3, rect.y3, fontSize, true, true, false);
+              const x1 = usePercentage ? rect.x1 * 100 : rect.x1;
+              const y1 = usePercentage ? rect.y1 * 100 : rect.y1;
+              const x3 = usePercentage ? rect.x3 * 100 : rect.x3;
+              const y3 = usePercentage ? rect.y3 * 100 : rect.y3;
+              minx = Math.min(minx, x1);
+              miny = Math.min(miny, y1);
+              maxx = Math.max(maxx, x3);
+              maxy = Math.max(maxy, y3);
+              const box = createTextBox(word.text, x1, y1, x3, y3, 0, true, true, false);
               document.body.appendChild(box);
+              // Estimate and apply the appropriate font size based on the box's dimensions and position
+              const fontSize = estimateFontSize(word.text, x3 - x1, y3 - y1, box, usePercentage);
+              box.style.fontSize = `${fontSize}px`;
               // textBoxParagraph.appendChild(box);
               // div.appendChild(box);
             });
@@ -348,21 +390,16 @@ background: rgba(202, 12, 12, 0.692);
             // const box = createTextBox(line.text, rect.x1, rect.y1, rect.x3, rect.y3, fontSize, false, false, false);
             // document.body.appendChild(box);
             if (magpieCompatibility) {
-              minx -= 100;
-              miny -= 100;
-              maxx += 100;
-              maxy += 100;
-            } else {
-              minx -= 10;
-              miny -= 10;
-              maxx += 10;
-              maxy += 10;
+              // minx -= usePercentage ? 5 : 100;
+                miny -= usePercentage ? 5 : 100;
+              // maxx += usePercentage ? 5 : 100;
+              maxy += usePercentage ? 1 : 10;
             }
             bigInteractiveArea.style.position = "absolute";
-            bigInteractiveArea.style.left = `${minx}px`;
-            bigInteractiveArea.style.top = `${miny}px`;
-            bigInteractiveArea.style.width = `${maxx - minx}px`;
-            bigInteractiveArea.style.height = `${maxy - miny}px`;
+            bigInteractiveArea.style.left = usePercentage ? `${minx}%` : `${minx}px`;
+            bigInteractiveArea.style.top = usePercentage ? `${miny}%` : `${miny}px`;
+            bigInteractiveArea.style.width = usePercentage ? `${maxx - minx}%` : `${maxx - minx}px`;
+            bigInteractiveArea.style.height = usePercentage ? `${maxy - miny}%` : `${maxy - miny}px`;
             document.body.appendChild(bigInteractiveArea);
           });
 
@@ -393,19 +430,15 @@ background: rgba(202, 12, 12, 0.692);
   setInterval(checkAndReconnectWebSockets, 1000); // Check every 10 seconds
 
   // Function to estimate font size based on word dimensions
-  function estimateFontSize(word, width, height) {
-    // Basic estimation: assume average character width is ~0.6 of font size
-    // and height should be close to font size
-    const charCount = word.length;
-    const estimatedByWidth = charCount > 0 ? (width / charCount) / 0.6 : height;
-    const estimatedByHeight = height * 0.8; // Account for line height
+  function estimateFontSize(word, width, height, containerEl, usePercentage) {
+    const rect = containerEl.getBoundingClientRect();
+    let pixelWidth, pixelHeight;
 
-    // Use the smaller of the two estimates to ensure text fits
-    const estimated = Math.min(estimatedByWidth, estimatedByHeight);
+    console.log(`Container rect: ${rect.left}, ${rect.top}, ${rect.right}, ${rect.bottom}`);
 
-    // Clamp to reasonable range (8px to 100px)
-    return Math.max(8, Math.min(100, Math.round(estimated)));
+    return Math.max(8, Math.min(100, Math.round(rect.height)));
   }
+
 
   // Function to create individual text boxes at specified coordinates
   function createTextBox(sentence, x1, y1, x2, y2, fontSize, noBackground = false, transparentText = false, verticalText = false) {
@@ -415,17 +448,18 @@ background: rgba(202, 12, 12, 0.692);
     textBox.textContent = sentence[0] == '\n' ? sentence.slice(1) : sentence;
 
     // Set position and dimensions
-    textBox.style.left = `${x1}px`;
-    textBox.style.top = `${y1}px`;
-    textBox.style.width = `${x2 - x1}px`;
-    textBox.style.height = `${y2 - y1}px`;
-    textBox.style.fontSize = '';
-    textBox.style.width = `${x2 - x1}px`;
-    textBox.style.height = `${y2 - y1}px`;
+    textBox.style.left = `${x1}${usePercentage ? '%' : 'px'}`;
+    textBox.style.top = `${y1}${usePercentage ? '%' : 'px'}`;
+    textBox.style.width = `${x2 - x1}${usePercentage ? '%' : 'px'}`;
+    textBox.style.height = `${y2 - y1}${usePercentage ? '%' : 'px'}`;
+    textBox.style.width = `${x2 - x1}${usePercentage ? '%' : 'px'}`;
+    textBox.style.height = `${y2 - y1}${usePercentage ? '%' : 'px'}`;
     textBox.style.display = 'block';
-    textBox.style.overflow = 'hidden';
+    textBox.style.overflow = 'visible';
     textBox.style.whiteSpace = 'nowrap';
-    textBox.style.fontSize = 'calc(min(100vw, 100vh) * 0.9)';
+    textBox.style.fontSize = '48px';
+    // textBox.style.fontSize = `${fontSize}${usePercentage ? '%' : 'px'}`;
+    textBox.style.lineHeight = 'normal';
     textBox.style.textOverflow = 'ellipsis';
 
     // Remove background if word-level
@@ -448,9 +482,30 @@ background: rgba(202, 12, 12, 0.692);
       // Additional styling for better text fitting
       textBox.style.lineHeight = '1';
       textBox.style.display = 'block';
-      textBox.style.overflow = 'hidden';
+      textBox.style.overflow = 'visible';
       textBox.style.whiteSpace = 'nowrap';
     }
+    // On hover, show all the interactive areas' backgrounds
+    // textBox.addEventListener('mouseenter', () => {
+    //   if (unHoverTimer) {
+    //     clearTimeout(unHoverTimer);
+    //   }
+    //   const bigAreas = document.querySelectorAll('.big-interactive-area');
+    //   bigAreas.forEach(area => {
+    //     area.style.background = 'rgba(15, 15, 15, 0.1)';
+    //   });
+    // });
+    // textBox.addEventListener('mouseleave', () => {
+    //   if (unHoverTimer) {
+    //     clearTimeout(unHoverTimer);
+    //   }
+    //   unHoverTimer = setTimeout(() => {
+    //     const bigAreas = document.querySelectorAll('.big-interactive-area');
+    //     bigAreas.forEach(area => {
+    //       area.style.background = 'transparent';
+    //     });
+    //   }, 50);
+    // });
     return textBox;
   }
 
@@ -458,6 +513,7 @@ background: rgba(202, 12, 12, 0.692);
     const interactiveElements = document.querySelectorAll('.interactive');
     const halfInteractiveElements = document.querySelectorAll('.half-interactive');
     const textBoxElements = document.querySelectorAll('.text-box');
+    const bigInteractiveAreas = document.querySelectorAll('.big-interactive-area');
     let isMouseOverInteractiveElement = false;
 
     console.log("Setting mouse event handlers for interactive elements:", interactiveElements);
@@ -482,6 +538,18 @@ background: rgba(202, 12, 12, 0.692);
           ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
         });
       }
+    });
+
+    bigInteractiveAreas.forEach((area) => {
+      area.addEventListener('click', (event) => {
+        // If not a textbox, hide the big interactive area for three seconds.
+        if (!event.target.classList.contains('text-box')) {
+          ipcRenderer.send('hide');
+          setTimeout(() => {
+            ipcRenderer.send('show');
+          }, 3000);
+        }
+      });
     });
   }
 
@@ -566,7 +634,24 @@ background: rgba(202, 12, 12, 0.692);
       const top = parseFloat(area.style.top) || 0;
       const width = parseFloat(area.style.width) || 0;
       const height = parseFloat(area.style.height) || 0;
-      if (magpieCompatibility) {
+      if (usePercentage) {
+        if (magpieCompatibility) {
+          // When using percentage units and Magpie compatibility is enabled,
+          // adjust the styles accordingly.
+          area.style.left = (left - 5) + '%';
+          area.style.top = (top - 5) + '%';
+          area.style.width = (width + 10) + '%';
+          area.style.height = (height + 10) + '%';
+        } else {
+          // When using percentage units and Magpie compatibility is disabled,
+          // reset to original styles or apply default adjustments.
+          area.style.left = left + '%';
+          area.style.top = top + '%';
+          area.style.width = width + '%';
+          area.style.height = height + '%';
+        }
+      }
+      else if (magpieCompatibility) {
         area.style.left = (left - 100) + 'px';
         area.style.top = (top - 100) + 'px';
         area.style.width = (width + 200) + 'px';

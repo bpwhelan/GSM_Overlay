@@ -76,3 +76,15 @@ export function getAllPermissions() {
                 this._sentenceScanExtent = scanExtent;
             }
 ```
+
+
+## Update `GSM_Overlay/yomitan/js/app/frontend.js` to force autoHideResults to true for overlay
+```javascript
+    _onSearchEmpty() {
+        const scanningOptions = /** @type {import('settings').ProfileOptions} */ (this._options).scanning;
+        // FORCE this option for overlay
+        // if (scanningOptions.autoHideResults) {
+            this._clearSelectionDelayed(scanningOptions.hideDelay, false, false);
+        // }
+    }
+```
