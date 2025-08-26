@@ -1,4 +1,7 @@
 # Overview
+
+https://github.com/bpwhelan/GameSentenceMiner
+
 This Overlay is designed to take plaintext and coordinates output from GSM to both display in a main textbox, as well as on-screen lookups overtop of the characters on screen.
 
 This is practically a completely different project from the original, and such, it cannot be used standalone, and should NOT be merged with the original project.
