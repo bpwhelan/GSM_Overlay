@@ -1,29 +1,14 @@
 # Overview
-This is a transparent overlay that listens for websocket output and display it on a page that can be read by yomitan. The goal is to have a window that can be placed on top of whatever text is being read and use yomitan on it directly rather than going back and forth between a texthooker page.
+This Overlay is designed to take plaintext and coordinates output from GSM to both display in a main textbox, as well as on-screen lookups overtop of the characters on screen.
 
-# Instructions
-- Download the zip file in releases
-- Unzip
-- Run transparent-textbox.exe
-- Click on the yomitan icon to open the yomitan settings page
-- Import your settings and dictionaries
-- Click the gear icon and set your websocket URL
-- Enjoy
-
-# Demo
-
-
-https://github.com/user-attachments/assets/efc3e127-93f2-41af-b237-be26df3141d6
+This is practically a completely different project from the original, and such, it should NOT be merged with the original project.
 
 
 
-# Future Goals
-- More polish (Proper app name and icon etc.)
-- Ability to read from the clipboard (if there is demand for it)
-- More optimizations
-- UI/UX imporvements
-- Custom Font Support
+https://github.com/user-attachments/assets/c691f5d6-da86-4e1c-802f-7c410211846e
+
 
 # Acknowledgement
+- [Original Project](https://github.com/Saplling/transparent-texthooker-overlay)
 - [Yomitan](https://github.com/yomidevs/yomitan)
 - [Yomininja](https://github.com/matt-m-o/YomiNinja) (rip)
