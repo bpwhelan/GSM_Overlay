@@ -1505,8 +1505,8 @@ export class TextScanner extends EventDispatcher {
     _convertInput(input) {
         const {options} = input;
         return {
-            include: [],
-            exclude: [],
+            include: this._getInputArray(input.include),
+            exclude: this._getInputArray(input.exclude),
             types: this._getInputTypeSet(input.types),
             searchTerms: this._getInputBoolean(options.searchTerms),
             searchKanji: this._getInputBoolean(options.searchKanji),

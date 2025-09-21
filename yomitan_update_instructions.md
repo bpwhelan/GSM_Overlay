@@ -68,6 +68,8 @@ export function getAllPermissions() {
 
 ## Update `GSM_Overlay/yomitan/js/language/text-scanner.js` to force terminationCharacterMode to "newlines" to get everything
 
+## Update Scan modifiers to include/exclude arrays to empty arrays to get everything NOT SURE IF THIS IS TOTALLY DESIRED, walked this back for now.
+
 ```javascript
         if (typeof sentenceParsingOptions === 'object' && sentenceParsingOptions !== null) {
             let {scanExtent, terminationCharacterMode, terminationCharacters} = sentenceParsingOptions;
@@ -75,10 +77,14 @@ export function getAllPermissions() {
             if (typeof scanExtent === 'number') {
                 this._sentenceScanExtent = scanExtent;
             }
+
+            // 1508
+            include: [],
+            exclude: [],
 ```
 
 
-## Update `GSM_Overlay/yomitan/js/app/frontend.js` to force autoHideResults to true for overlay
+## Update `GSM_Overlay/yomitan/js/app/frontend.js` to force autoHideResults to true for overlay, walked this back
 ```javascript
     _onSearchEmpty() {
         const scanningOptions = /** @type {import('settings').ProfileOptions} */ (this._options).scanning;

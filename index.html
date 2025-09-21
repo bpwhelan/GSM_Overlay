@@ -190,18 +190,18 @@ background: rgba(202, 12, 12, 0.692);
 <script>
   let yomitanShowing = false;
   let autoHide = null;
-  let currentX = 0;
-  let currentY = 0;
+  // let currentX = 0;
+  // let currentY = 0;
   let magpieReleaseInterval = null;
 
-  window.addEventListener('mousemove', (e) => {
-    currentX = e.clientX;
-    currentY = e.clientY;
-  });
+  // window.addEventListener('mousemove', (e) => {
+  //   currentX = e.clientX;
+  //   currentY = e.clientY;
+  // });
 
   function attemptAutoHide() {
     console.log("Attempting to hide yomitan popup automatically")
-    const elementAtPoint = document.elementFromPoint(currentX, currentY);
+    // const elementAtPoint = document.elementFromPoint(currentX, currentY);
     if (elementAtPoint && (elementAtPoint.classList.contains('interactive') || elementAtPoint.classList.contains('yomitan-popup'))) {
       // Mouse is over an interactive element, do nothing
       return;
