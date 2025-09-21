@@ -158,7 +158,6 @@ background: rgba(202, 12, 12, 0.692);
   /* .big-interactive-area:hover {
     background: rgba(15, 15, 15, 0.1);
   } */
-
 </style>
 
 <html>
@@ -183,7 +182,7 @@ background: rgba(202, 12, 12, 0.692);
     <div id="text" class="interactive">Hide this box with Alt+Shift+H</div>
     <div draggable="false" id="resize-handle" class="interactive half-interactive"></div>
   </div>
-  <div id="text-box-container" class="text-box-container interactive"></div>
+  <!-- <div id="text-box-container" class="text-box-container interactive"></div> -->
   <!-- <p id="text-box-paragraph" style="width: 100%; height: 100%;"></p> -->
 </body>
 
@@ -193,6 +192,7 @@ background: rgba(202, 12, 12, 0.692);
   let autoHide = null;
   let currentX = 0;
   let currentY = 0;
+  let magpieReleaseInterval = null;
 
   window.addEventListener('mousemove', (e) => {
     currentX = e.clientX;
@@ -334,20 +334,10 @@ background: rgba(202, 12, 12, 0.692);
           // Handle array of {text, bounding_rect}
           data.forEach(line => {
             const rect = line.bounding_rect;
-            // Check if coordinates are percentages (<1)
             usePercentage = rect.x1 < 1 && rect.y1 < 1 && rect.x3 < 1 && rect.y3 < 1;
             let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
             let bigInteractiveArea = document.createElement("div");
             bigInteractiveArea.className = "big-interactive-area interactive half-interactive";
-            // let div = document.createElement("div");
-            // div.className = "text-box interactive";
-            // div.style.left = `${x1}px`;
-            // div.style.top = `${y1}px`;
-            // div.style.width = `${x2 - x1}px`;
-            // div.style.height = `${y2 - y1}px`;
-            // div.style.fontSize = `${estimateFontSize(line.text, x2 - x1, y2 - y1)}px`;
-            // div.textContent = line.text[0] == '\n' ? line.text.slice(1) : line.text;
-            // div.style.background = 'rgba(0,0,0,0)';
             if (!/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/.test(line.text)) {
               // Not Japanese, Chinese, or Korean: add a spacer span after each box
               const spacer = document.createElement('span');
@@ -371,29 +361,12 @@ background: rgba(202, 12, 12, 0.692);
               // Estimate and apply the appropriate font size based on the box's dimensions and position
               const fontSize = estimateFontSize(word.text, x3 - x1, y3 - y1, box, usePercentage);
               box.style.fontSize = `${fontSize}px`;
-              // textBoxParagraph.appendChild(box);
-              // div.appendChild(box);
             });
-            // document.body.appendChild(div);
-            // const rect = line.bounding_rect;
-            // // Estimate Font size with avg bounding box
-            // let avg_width = 0;
-            // let avg_height = 0;
-            // for (const word of line.words) {
-            //   const wordRect = word.bounding_rect;
-            //   avg_width += wordRect.x3 - wordRect.x1;
-            //   avg_height += wordRect.y3 - wordRect.y1;
-            // }
-            // console.log(`Average width: ${avg_width / line.words.length}, Average height: ${avg_height / line.words.length}`);
-            // const fontSize = estimateFontSize(1, avg_width / line.words.length, avg_height / line.words.length);
-            // console.log(`Estimated font size for "${line.text}": ${fontSize}px`);
-            // const box = createTextBox(line.text, rect.x1, rect.y1, rect.x3, rect.y3, fontSize, false, false, false);
-            // document.body.appendChild(box);
             if (magpieCompatibility) {
-              // minx -= usePercentage ? 5 : 100;
-                miny -= usePercentage ? 5 : 100;
-              // maxx += usePercentage ? 5 : 100;
-              maxy += usePercentage ? 1 : 10;
+              minx -= usePercentage ? 5 : 100;
+              miny -= usePercentage ? 20 : 100;
+              maxx += usePercentage ? 5 : 100;
+              maxy += usePercentage ? 5 : 100;
             }
             bigInteractiveArea.style.position = "absolute";
             bigInteractiveArea.style.left = usePercentage ? `${minx}%` : `${minx}px`;
@@ -419,6 +392,52 @@ background: rgba(202, 12, 12, 0.692);
     }
   }
 
+  // Function to create individual text boxes at specified coordinates
+  function createTextBox(sentence, x1, y1, x2, y2, fontSize, noBackground = false, transparentText = false, verticalText = false) {
+    console.log(`Creating box for "${sentence}" at (${x1}, ${y1}) to (${x2}, ${y2}) with font size ${fontSize}`);
+    const textBox = document.createElement('span');
+    textBox.className = 'text-box interactive';
+    textBox.textContent = sentence[0] == '\n' ? sentence.slice(1) : sentence;
+
+    // Set position and dimensions
+    textBox.style.left = `${x1}${usePercentage ? '%' : 'px'}`;
+    textBox.style.top = `${y1}${usePercentage ? '%' : 'px'}`;
+    textBox.style.width = `${x2 - x1}${usePercentage ? '%' : 'px'}`;
+    textBox.style.height = `${y2 - y1}${usePercentage ? '%' : 'px'}`;
+    textBox.style.width = `${x2 - x1}${usePercentage ? '%' : 'px'}`;
+    textBox.style.height = `${y2 - y1}${usePercentage ? '%' : 'px'}`;
+    textBox.style.display = 'block';
+    textBox.style.overflow = 'visible';
+    textBox.style.whiteSpace = 'nowrap';
+    textBox.style.fontSize = '48px';
+    textBox.style.lineHeight = 'normal';
+    textBox.style.textOverflow = 'ellipsis';
+
+    // Remove background if word-level
+    if (noBackground) {
+      textBox.style.background = 'rgba(0,0,0,0)';
+    }
+    // Make text transparent if requested
+    if (transparentText) {
+      textBox.style.color = 'rgba(255,255,255,0)';
+    }
+
+    // Vertical text support also check if japanese characters are present
+    if (verticalText && /[^\u0000-\u007F]+/.test(sentence)) {
+      textBox.style.writingMode = 'vertical-rl';
+      textBox.style.textAlign = 'center';
+      textBox.style.alignItems = 'flex-start';
+      textBox.style.justifyContent = 'center';
+      textBox.style.whiteSpace = 'normal';
+    } else {
+      textBox.style.lineHeight = '1';
+      textBox.style.display = 'block';
+      textBox.style.overflow = 'visible';
+      textBox.style.whiteSpace = 'nowrap';
+    }
+    return textBox;
+  }
+
   function checkAndReconnectWebSockets() {
     if (window.ws1 && window.ws1.readyState === WebSocket.CLOSED) {
       setupWebSocket(window.ws1.url, true);
@@ -440,75 +459,6 @@ background: rgba(202, 12, 12, 0.692);
   }
 
 
-  // Function to create individual text boxes at specified coordinates
-  function createTextBox(sentence, x1, y1, x2, y2, fontSize, noBackground = false, transparentText = false, verticalText = false) {
-    console.log(`Creating box for "${sentence}" at (${x1}, ${y1}) to (${x2}, ${y2}) with font size ${fontSize}`);
-    const textBox = document.createElement('span');
-    textBox.className = 'text-box interactive';
-    textBox.textContent = sentence[0] == '\n' ? sentence.slice(1) : sentence;
-
-    // Set position and dimensions
-    textBox.style.left = `${x1}${usePercentage ? '%' : 'px'}`;
-    textBox.style.top = `${y1}${usePercentage ? '%' : 'px'}`;
-    textBox.style.width = `${x2 - x1}${usePercentage ? '%' : 'px'}`;
-    textBox.style.height = `${y2 - y1}${usePercentage ? '%' : 'px'}`;
-    textBox.style.width = `${x2 - x1}${usePercentage ? '%' : 'px'}`;
-    textBox.style.height = `${y2 - y1}${usePercentage ? '%' : 'px'}`;
-    textBox.style.display = 'block';
-    textBox.style.overflow = 'visible';
-    textBox.style.whiteSpace = 'nowrap';
-    textBox.style.fontSize = '48px';
-    // textBox.style.fontSize = `${fontSize}${usePercentage ? '%' : 'px'}`;
-    textBox.style.lineHeight = 'normal';
-    textBox.style.textOverflow = 'ellipsis';
-
-    // Remove background if word-level
-    if (noBackground) {
-      textBox.style.background = 'rgba(0,0,0,0)';
-    }
-    // Make text transparent if requested
-    if (transparentText) {
-      textBox.style.color = 'rgba(255,255,255,0)';
-    }
-
-    // Vertical text support also check if japanese characters are present
-    if (verticalText && /[^\u0000-\u007F]+/.test(sentence)) {
-      textBox.style.writingMode = 'vertical-rl';
-      textBox.style.textAlign = 'center';
-      textBox.style.alignItems = 'flex-start';
-      textBox.style.justifyContent = 'center';
-      textBox.style.whiteSpace = 'normal';
-    } else {
-      // Additional styling for better text fitting
-      textBox.style.lineHeight = '1';
-      textBox.style.display = 'block';
-      textBox.style.overflow = 'visible';
-      textBox.style.whiteSpace = 'nowrap';
-    }
-    // On hover, show all the interactive areas' backgrounds
-    // textBox.addEventListener('mouseenter', () => {
-    //   if (unHoverTimer) {
-    //     clearTimeout(unHoverTimer);
-    //   }
-    //   const bigAreas = document.querySelectorAll('.big-interactive-area');
-    //   bigAreas.forEach(area => {
-    //     area.style.background = 'rgba(15, 15, 15, 0.1)';
-    //   });
-    // });
-    // textBox.addEventListener('mouseleave', () => {
-    //   if (unHoverTimer) {
-    //     clearTimeout(unHoverTimer);
-    //   }
-    //   unHoverTimer = setTimeout(() => {
-    //     const bigAreas = document.querySelectorAll('.big-interactive-area');
-    //     bigAreas.forEach(area => {
-    //       area.style.background = 'transparent';
-    //     });
-    //   }, 50);
-    // });
-    return textBox;
-  }
-
   function setMouseEventHandlers() {
     const interactiveElements = document.querySelectorAll('.interactive');
     const halfInteractiveElements = document.querySelectorAll('.half-interactive');
@@ -519,7 +469,7 @@ background: rgba(202, 12, 12, 0.692);
     console.log("Setting mouse event handlers for interactive elements:", interactiveElements);
 
     interactiveElements.forEach((element) => {
-      element.addEventListener('mouseenter', () => {
+      element.addEventListener('mouseenter', (event) => {
         isMouseOverInteractiveElement = true;
         ipcRenderer.send('set-ignore-mouse-events', false);
       });
@@ -556,8 +506,10 @@ background: rgba(202, 12, 12, 0.692);
   // Function to clear all existing text boxes
   function clearTextBoxes() {
     const existingBoxes = document.querySelectorAll('.text-box');
-    existingBoxes.forEach(box => box.remove());
+    const existingLineBreaks = document.querySelectorAll('br');
     const bigAreas = document.querySelectorAll('.big-interactive-area');
+    existingLineBreaks.forEach(br => br.remove());
+    existingBoxes.forEach(box => box.remove());
     bigAreas.forEach(area => area.remove());
   }
 
@@ -592,7 +544,7 @@ background: rgba(202, 12, 12, 0.692);
   });
 
   // If anywhere but ".interactive" and ".yomitan-popup" is left clicked or right clicked, ignore mouse events, and let it go through
-  document.addEventListener("mousedown", (event) => {
+  document.addEventListener("click", (event) => {
     if (!event.target.closest(".interactive") && !event.target.closest(".yomitan-popup") && !yomitanShowing) {
       ipcRenderer.send("set-ignore-mouse-events", true, { forward: true });
     }
@@ -608,6 +560,17 @@ background: rgba(202, 12, 12, 0.692);
       mainBox.style.display = "none";
     } else {
       mainBox.style.display = "";
+    }
+    if (magpieCompatibility) {
+      // every 500ms, set-ignore-mouse-events to true
+      if (magpieReleaseInterval) {
+        clearInterval(magpieReleaseInterval);
+      }
+      magpieReleaseInterval = setInterval(() => {
+        if (!pinned && !yomitanShowing) {
+          ipcRenderer.send("set-ignore-mouse-events", true, { forward: true });
+        }
+      }, 1000);
     }
   })
 
@@ -634,6 +597,21 @@ background: rgba(202, 12, 12, 0.692);
       const top = parseFloat(area.style.top) || 0;
       const width = parseFloat(area.style.width) || 0;
       const height = parseFloat(area.style.height) || 0;
+
+      if (magpieReleaseInterval) {
+        clearInterval(magpieReleaseInterval);
+        magpieReleaseInterval = null;
+      }
+
+      if (magpieCompatibility) {
+        magpieReleaseInterval = setInterval(() => {
+          if (!pinned && !yomitanShowing) {
+            ipcRenderer.send("set-ignore-mouse-events", true, { forward: true });
+          }
+        }, 1000);
+      }
+
+
       if (usePercentage) {
         if (magpieCompatibility) {
           // When using percentage units and Magpie compatibility is enabled,
@@ -663,7 +641,20 @@ background: rgba(202, 12, 12, 0.692);
         area.style.height = (height - 200 + 20) + 'px';
       }
     });
-  })
+  });
+
+  // ipcRenderer.on('shift-space-mode', (event, isActive) => {
+  //   shiftSpacePressed = isActive;
+  //   if (shiftSpacePressed) {
+  //     document.body.classList.add('force-visible');
+  //     document.body.style.display = 'block';
+  //     ipcRenderer.send('set-ignore-mouse-events', false);
+  //   } else if (!pinned) {
+  //     document.body.classList.remove('force-visible');
+  //     document.body.style.display = 'none';
+  //     ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
+  //   }
+  // });
 
   ipcRenderer.on("force-visible", (event, value) => {
     if (!pinned) {

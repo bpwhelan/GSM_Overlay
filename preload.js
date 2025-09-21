@@ -1,3 +1,5 @@
+const { ipcRenderer } = require('electron');
+
 // https://stackoverflow.com/questions/74464771/how-to-implement-click-through-window-except-on-element-in-electron
 let isMouseOverInteractiveElement = false;
 
@@ -18,8 +20,12 @@ function setMouseEventHandlers() {
     });
 }
 
+// Expose ipcRenderer to the renderer process through context bridge
 window.addEventListener('DOMContentLoaded', () => {
     setMouseEventHandlers();
+    
+    // Make ipcRenderer available globally for the app
+    window.ipcRenderer = ipcRenderer;
 });
 
 // setInterval(() => {

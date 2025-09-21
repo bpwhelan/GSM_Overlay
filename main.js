@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require('path');
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+let shiftSpacePressed = false;
 let ext;
 let userSettings = {
   "fontSize": 42,
@@ -65,14 +66,49 @@ app.whenReady().then(async () => {
   });
 
   globalShortcut.register('Alt+Shift+J', () => {
+    const win = BrowserWindow.getAllWindows()[0];
     if (win) {
-      win.minimize();
+      if (win.isMinimized()) {
+        win.restore();
+        win.blur();
+      }
+      else win.minimize();
     }
   });
 
   globalShortcut.register('Alt+Shift+Y', () => {
     openYomitanSettings();
   });
+
+
+  
+  // // Shift+Space enters "shiftSpace mode" on press, exits on release.
+  // globalShortcut.register('Shift+Space', () => {
+  //   const win = BrowserWindow.getAllWindows()[0];
+  //   if (win && !shiftSpacePressed) {
+  //     shiftSpacePressed = true;
+  //     win.webContents.send('shift-space-mode', true); // Enter mode
+  //   }
+  // });
+
+  // globalShortcut.register('Shift+Space', () => {}, () => {
+  //   const win = BrowserWindow.getAllWindows()[0];
+  //   if (win && shiftSpacePressed) {
+  //     win.webContents.send('shift-space-mode', false); // Exit mode
+  //   }
+  // });
+
+  // // On press down, toggle overlay on top and focused, on release, toggle back
+  // globalShortcut.register('O', () => {
+  //   if (win) {
+  //     win.setAlwaysOnTop(true, 'screen-saver');
+  //     win.focus();
+  //   }
+  // }, () => {
+  //   if (win) {
+  //     win.setAlwaysOnTop(false);
+  //   }
+  // });
 
   // Unregister shortcuts on quit
   app.on('will-quit', () => {
@@ -93,6 +129,7 @@ app.whenReady().then(async () => {
     resizable: false,
     titleBarStyle: 'hidden',
     title: "",
+    // focusable: false,
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: true,
@@ -110,6 +147,9 @@ app.whenReady().then(async () => {
     if (!resizeMode && !yomitanShown) {
       win.setIgnoreMouseEvents(ignore, options)
     }
+    // if (ignore) {
+    //   win.blur();
+    // }
   })
 
   ipcMain.on("hide", (event, state) => {
@@ -131,11 +171,17 @@ app.whenReady().then(async () => {
     yomitanShown = state;
     if (state) {
       win.setIgnoreMouseEvents(false, { forward: true });
-      win.setAlwaysOnTop(true, 'screen-saver');
+      // win.setAlwaysOnTop(true, 'screen-saver');
     } else {
       win.setIgnoreMouseEvents(true, { forward: true });
-      win.setAlwaysOnTop(true, 'screen-saver');
-      // win.blur();
+      // win.setAlwaysOnTop(true, 'screen-saver');
+      win.blur();
+      // Blur again after a short delay to ensure it takes effect
+      setTimeout(() => {
+        if (!resizeMode && !yomitanShown) {
+          win.blur();
+        }
+      }, 100);
     }
   })
 
@@ -263,21 +309,48 @@ app.whenReady().then(async () => {
   // let alwaysOnTopInterval;
 
   ipcMain.on("text-recieved", (event, text) => {
-    win.show();
-    win.setAlwaysOnTop(true, 'screen-saver');
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    // if (!alwaysOnTopInterval) {
-    // This is necessary to keep the window always on top
-    // It seems that sometimes the window loses its always-on-top status
-    // and this interval helps to restore it
-    // alwaysOnTopInterval = setInterval(() => {
-    //   try {
-    //     win?.setAlwaysOnTop(true, 'screen-saver');
-    //   } catch (error) {
-    //     console.error("Error setting always on top, maybe app is closing:", error);
+    // If window is minimized, restore it
+    if (win.isMinimized()) {
+      win.setAlwaysOnTop(true, 'screen-saver');
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    } 
+
+    // console.log(`magpieCompatibility: ${userSettings.magpieCompatibility}`);
+    if (userSettings.magpieCompatibility) {
+      win.show();
+      win.blur();
+    }
+    //   // Slightly adjust position to workaround Magpie stealing focus
+    //   win.show();
+    //   win.setAlwaysOnTop(true, 'screen-saver');
+    //   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // //   const ensureOnTop = setInterval(() => {
+    // //   if (win && !win.isDestroyed()) {
+    // //     try {
+    // //       win.setAlwaysOnTop(true, 'screen-saver');
+    // //       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // //     } catch (error) {
+    // //       console.error("Error maintaining always-on-top:", error);
+    // //       clearInterval(ensureOnTop);
+    // //     }
+    // //   } else {
+    // //     clearInterval(ensureOnTop);
+    // //   }
+    // // }, 100); // Check every 2 seconds instead of 100ms for better performance
+    // }
+
+    // Ensure window stays on top when text is received
+    // win.setAlwaysOnTop(true, 'screen-saver');
+    // win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // Don't blur immediately - let the overlay stay accessible briefly
+    // setTimeout(() => {
+    //   if (!yomitanShown && !resizeMode) {
+    //     win.blur();
     //   }
     // }, 100);
-    // }
+    
+    // Periodically ensure always-on-top status is maintained
+    // Some applications can steal focus and break overlay behavior
   });
 
   app.on("before-quit", () => {
