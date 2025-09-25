@@ -2,6 +2,7 @@ const { app, BrowserWindow, session, screen, globalShortcut } = require('electro
 const { ipcMain } = require("electron");
 const fs = require("fs");
 const path = require('path');
+const magpie = require('./magpie');
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 let shiftSpacePressed = false;
@@ -11,7 +12,9 @@ let userSettings = {
   "weburl1": "ws://localhost:55002",
   "weburl2": "ws://localhost:55499",
   "hideOnStartup": false,
-  "magpieCompatibility": false
+  "magpieCompatibility": false,
+  "enableManualMode": false,
+  "showHotkey": "Shift + Space"
 };
 
 if (fs.existsSync(settingsPath)) {
@@ -24,6 +27,10 @@ if (fs.existsSync(settingsPath)) {
     console.error("Failed to load settings.json:", e)
 
   }
+}
+
+function saveSettings() {
+  fs.writeFileSync(settingsPath, JSON.stringify(userSettings, null, 2))
 }
 
 function openYomitanSettings() {
@@ -47,6 +54,17 @@ function openYomitanSettings() {
 }
 
 app.whenReady().then(async () => {
+  // Setup a inf loop here that doesn't block so i can test code periodically
+  setInterval(async () => {
+    // track time it takes to get magpie info
+    const start = Date.now();
+    const magpieInfo = await magpie.magpieGetInfo();
+    const end = Date.now();
+    // console.log(`Time taken to get magpie info: ${end - start}ms`);
+    const win = BrowserWindow.getAllWindows()[0];
+    win.webContents.send('magpie-window-info', magpieInfo);
+  }, 5000); // Every 5 seconds
+
   const isDev = !app.isPackaged;
   const extPath = isDev ? path.join(__dirname, 'yomitan') : path.join(process.resourcesPath, "yomitan")
   try {
@@ -80,25 +98,44 @@ app.whenReady().then(async () => {
     openYomitanSettings();
   });
 
+  globalShortcut.register("Alt+Shift+M", () => {
+    userSettings.magpieCompatibility = !userSettings.magpieCompatibility;
+    saveSettings();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("new-magpieCompatibility", userSettings.magpieCompatibility);
+    }
+  })
 
-  
-  // // Shift+Space enters "shiftSpace mode" on press, exits on release.
-  // globalShortcut.register('Shift+Space', () => {
+
+  // Shift+Space enters "shiftSpace mode" on press, exits on release.
+  // Electron globalShortcut requires a combination with a non-modifier key.
+  // Valid examples: 'Alt+Space', 'Ctrl+Shift+O', 'CommandOrControl+Shift+Y', etc.
+  // Modifier keys: 'CommandOrControl', 'Alt', 'Shift', 'Super'
+  // Non-modifier keys: Any single character, function keys (F1-F24), 'Space', etc.
+  // It cannot be just a modifier (e.g. 'Shift'), must include a regular key.
+  // Shift+Space enters "shiftSpace mode" on press, exits on release.
+  // globalShortcut.register('numadd', () => {
+  //   console.log("Numpad + pressed");
   //   const win = BrowserWindow.getAllWindows()[0];
-  //   if (win && !shiftSpacePressed) {
+  //   if (win) {
   //     shiftSpacePressed = true;
   //     win.webContents.send('shift-space-mode', true); // Enter mode
+  //     win.setIgnoreMouseEvents(false, { forward: true });
   //   }
   // });
-
-  // globalShortcut.register('Shift+Space', () => {}, () => {
+  
+  // globalShortcut.register('numadd', () => {}, () => {
+  //   console.log("Shift+Space released");
   //   const win = BrowserWindow.getAllWindows()[0];
   //   if (win && shiftSpacePressed) {
+  //     shiftSpacePressed = false;
   //     win.webContents.send('shift-space-mode', false); // Exit mode
+  //     win.setIgnoreMouseEvents(true, { forward: true });
   //   }
   // });
+  
 
-  // // On press down, toggle overlay on top and focused, on release, toggle back
+  // On press down, toggle overlay on top and focused, on release, toggle back
   // globalShortcut.register('O', () => {
   //   if (win) {
   //     win.setAlwaysOnTop(true, 'screen-saver');
@@ -143,14 +180,14 @@ app.whenReady().then(async () => {
   let resizeMode = false;
   let yomitanShown = false;
   ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
-    console.log("set-ignore-mouse-events", ignore, options, resizeMode, yomitanShown);
+    // console.log("set-ignore-mouse-events", ignore, options, resizeMode, yomitanShown);
     if (!resizeMode && !yomitanShown) {
       win.setIgnoreMouseEvents(ignore, options)
     }
     // if (ignore) {
     //   win.blur();
     // }
-  })
+  });
 
   ipcMain.on("hide", (event, state) => {
     win.minimize();
@@ -288,23 +325,39 @@ app.whenReady().then(async () => {
   ipcMain.on("fontsize-changed", (event, newsize) => {
     win.webContents.send("new-fontsize", newsize);
     userSettings.fontSize = newsize;
+    saveSettings();
   })
   ipcMain.on("weburl1-changed", (event, newurl) => {
     userSettings.weburl1 = newurl;
-    win.webContents.send("new-weburl1", newurl)
+    win.webContents.send("new-weburl1", newurl);
+    saveSettings();
   })
   ipcMain.on("weburl2-changed", (event, newurl) => {
     userSettings.weburl2 = newurl;
-    win.webContents.send("new-weburl2", newurl)
+    win.webContents.send("new-weburl2", newurl);
+    saveSettings();
   })
   ipcMain.on("hideonstartup-changed", (event, newValue) => {
     userSettings.hideOnStartup = newValue;
     win.webContents.send("new-hideonstartup", newValue);
+    saveSettings();
   })
   ipcMain.on("magpieCompatibility-changed", (event, newValue) => {
     userSettings.magpieCompatibility = newValue;
     win.webContents.send("new-magpieCompatibility", newValue);
+    saveSettings();
   })
+  ipcMain.on("manualmode-changed", (event, newValue) => {
+    userSettings.enableManualMode = newValue;
+    win.webContents.send("new-manualmode", newValue);
+  saveSettings();
+  });
+
+  ipcMain.on("showHotkey-changed", (event, newValue) => {
+    userSettings.showHotkey = newValue;
+    win.webContents.send("new-showHotkey", newValue);
+    saveSettings();
+  });
 
   // let alwaysOnTopInterval;
 
