@@ -50,7 +50,7 @@ background: rgba(202, 12, 12, 0.692);
     text-align: start;
     pointer-events: auto;
     user-select: text;
-    z-index: 1000;
+    z-index: 999;
     line-height: 1;
     display: block;
     align-items: center;
@@ -190,6 +190,7 @@ background: rgba(202, 12, 12, 0.692);
 <script>
   let yomitanShowing = false;
   let autoHide = null;
+  let hideOnYomitanClose = false;
   // let currentX = 0;
   // let currentY = 0;
   let magpieReleaseInterval = null;
@@ -213,9 +214,12 @@ background: rgba(202, 12, 12, 0.692);
     ipcRenderer.send('yomitan-event', false);
     ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
     yomitanShowing = false;
-    if (autoHide) {
-      clearTimeout(autoHide);
-      autoHide = null;
+    if (hideOnYomitanClose) {
+      hideOnYomitanClose = false;
+      if (!pinned) {
+        document.body.classList.remove('force-visible');
+      }
+      hideTextBoxes();
     }
   });
 
@@ -265,6 +269,9 @@ background: rgba(202, 12, 12, 0.692);
   let usePercentage = false;
   let unHoverTimer = null;
   let magpieWindowInfo = null;
+  let manualMode = false;
+  let showHotkey = "Shift + Space";
+  let manualHotkeyPressed = false;
 
   dragBar.addEventListener("mousedown", (e) => {
     const rect = mainBox.getBoundingClientRect();
@@ -316,6 +323,7 @@ background: rgba(202, 12, 12, 0.692);
         }
 
         // Clear existing text boxes
+        const mainBoxBounds = mainBox.getBoundingClientRect();
         clearTextBoxes();
 
         console.log(data);
@@ -352,8 +360,14 @@ background: rgba(202, 12, 12, 0.692);
               const box = createTextBox(word.text, x1, y1, x3, y3, 0, true, true, false);
               // Disable pointer events and set display:none by default
               document.body.appendChild(box);
+              const boundBox = box.getBoundingClientRect();
+              if (pinned && isTextInMainBox(boundBox, mainBoxBounds)) {
+                console.log("Text inside main box, hiding:", word.text);
+                box.style.display = 'none';
+                return; // Skip boxes found inside main box
+              }
               // Estimate and apply the appropriate font size based on the box's dimensions and position
-              const fontSize = estimateFontSize(word.text, x3 - x1, y3 - y1, box, usePercentage);
+              const fontSize = estimateFontSize(word.text, x3 - x1, y3 - y1, boundBox, usePercentage);
               box.style.fontSize = `${fontSize}px`;
             });
 
@@ -399,6 +413,10 @@ background: rgba(202, 12, 12, 0.692);
           let line = data?.sentence || data;
           document.getElementById("text").textContent = line[0] == '\n' ? line.slice(1) : line;
         }
+        if (manualMode && !manualHotkeyPressed) {
+          hideTextBoxes();
+        }
+
         ipcRenderer.send("text-recieved", data);
         if (!manualModeActivatedOnce) {
           setMouseEventHandlers();
@@ -502,13 +520,23 @@ background: rgba(202, 12, 12, 0.692);
   }
 
   // Function to estimate font size based on word dimensions
-  function estimateFontSize(word, width, height, containerEl, usePercentage) {
-    const rect = containerEl.getBoundingClientRect();
+  function estimateFontSize(word, width, height, rect, usePercentage) {
     let pixelWidth, pixelHeight;
 
     console.log(`Container rect: ${rect.left}, ${rect.top}, ${rect.right}, ${rect.bottom}`);
 
     return Math.max(8, Math.min(100, Math.round(rect.height)));
+  }
+
+  function isTextInMainBox(rect, mainBoxBounds) {
+    // If mainbox is not visible, return false
+    if (mainBox.style.display === "none" || mainBox.style.visibility === "hidden") {
+      return false;
+    }
+    return !(rect.right < mainBoxBounds.left ||
+      rect.left > mainBoxBounds.right ||
+      rect.bottom < mainBoxBounds.top ||
+      rect.top > mainBoxBounds.bottom);
   }
 
 
@@ -568,6 +596,20 @@ background: rgba(202, 12, 12, 0.692);
     spacers.forEach(spacer => spacer.remove());
   }
 
+  function hideTextBoxes() {
+    const existingBoxes = document.querySelectorAll('.text-box');
+    existingBoxes.forEach(box => box.style.display = 'none');
+    const bigAreas = document.querySelectorAll('.big-interactive-area');
+    bigAreas.forEach(area => area.style.display = 'none');
+  }
+
+  function showTextBoxes() {
+    const existingBoxes = document.querySelectorAll('.text-box');
+    existingBoxes.forEach(box => box.style.display = 'block');
+    const bigAreas = document.querySelectorAll('.big-interactive-area');
+    bigAreas.forEach(area => area.style.display = 'block');
+  }
+
   let resizeMode = false;
   let pinned = false;
   document.getElementById("btn-pin").addEventListener("click", () => {
@@ -575,10 +617,12 @@ background: rgba(202, 12, 12, 0.692);
       document.body.classList.add("force-visible");
       pinned = true;
       document.getElementById("btn-pin").style.color = "#ddd2d2";
+      ipcRenderer.send("pinned-changed", true);
     } else {
       document.getElementById("btn-pin").style.color = "#ddd2d2a3";
       document.body.classList.remove("force-visible");
       pinned = false;
+      ipcRenderer.send("pinned-changed", false);
     }
   });
 
@@ -611,18 +655,32 @@ background: rgba(202, 12, 12, 0.692);
     setupWebSocket(newsettings.weburl2, false)
     hideOnStartup = newsettings.hideOnStartup;
     magpieCompatibility = newsettings.magpieCompatibility;
+    manualMode = newsettings.manualMode;
+    showHotkey = newsettings.showHotkey;
+    pinned = newsettings.pinned;
+
+    if (pinned) {
+      document.body.classList.add("force-visible");
+      document.getElementById("btn-pin").style.color = "#ddd2d2";
+    } else {
+      document.getElementById("btn-pin").style.color = "#ddd2d2a3";
+      document.body.classList.remove("force-visible");
+    }
+
     if (hideOnStartup) {
       mainBox.style.display = "none";
     } else {
       mainBox.style.display = "";
     }
+
+    if (magpieReleaseInterval) {
+      clearInterval(magpieReleaseInterval);
+    }
+
     if (magpieCompatibility) {
       // every 500ms, set-ignore-mouse-events to true
-      if (magpieReleaseInterval) {
-        clearInterval(magpieReleaseInterval);
-      }
       magpieReleaseInterval = setInterval(() => {
-        if (!pinned && !yomitanShowing) {
+        if (!pinned && !yomitanShowing && !manualHotkeyPressed) {
           ipcRenderer.send("set-ignore-mouse-events", true, { forward: true });
         }
       }, 1000);
@@ -645,6 +703,20 @@ background: rgba(202, 12, 12, 0.692);
   ipcRenderer.on("new-magpieCompatibility", (event, newValue) => {
     magpieCompatibility = newValue;
     console.log("Magpie compatibility changed to:", magpieCompatibility);
+
+    if (magpieReleaseInterval) {
+      clearInterval(magpieReleaseInterval);
+      magpieReleaseInterval = null;
+    }
+
+    if (magpieCompatibility) {
+      magpieReleaseInterval = setInterval(() => {
+        if (!pinned && !yomitanShowing && !manualHotkeyPressed) {
+          ipcRenderer.send("set-ignore-mouse-events", true, { forward: true });
+        }
+      }, 1000);
+    }
+
     // Update any UI elements or settings related to magpieCompatibility
     const bigInteractiveAreas = document.querySelectorAll('.big-interactive-area');
     bigInteractiveAreas.forEach(area => {
@@ -652,20 +724,6 @@ background: rgba(202, 12, 12, 0.692);
       const top = parseFloat(area.style.top) || 0;
       const width = parseFloat(area.style.width) || 0;
       const height = parseFloat(area.style.height) || 0;
-
-      if (magpieReleaseInterval) {
-        clearInterval(magpieReleaseInterval);
-        magpieReleaseInterval = null;
-      }
-
-      if (magpieCompatibility) {
-        magpieReleaseInterval = setInterval(() => {
-          if (!pinned && !yomitanShowing) {
-            ipcRenderer.send("set-ignore-mouse-events", true, { forward: true });
-          }
-        }, 1000);
-      }
-
 
       if (usePercentage) {
         if (magpieCompatibility) {
@@ -698,16 +756,22 @@ background: rgba(202, 12, 12, 0.692);
     });
   });
 
-  ipcRenderer.on('shift-space-mode', (event, isActive) => {
-    shiftSpacePressed = isActive;
-    if (shiftSpacePressed) {
+  ipcRenderer.on('show-overlay-hotkey', (event, isActive) => {
+    manualHotkeyPressed = isActive;
+    if (manualHotkeyPressed) {
       manualModeActivatedOnce = true;
       document.body.classList.add('force-visible');
-      document.documentElement.style.display = 'flex';
+      showTextBoxes();
       ipcRenderer.send('set-ignore-mouse-events', false);
     } else {
-      document.body.classList.remove('force-visible');
-      document.documentElement.style.display = 'none';
+      if (yomitanShowing) {
+        hideOnYomitanClose = true;
+        return;
+      }
+      if (!pinned) {
+        document.body.classList.remove('force-visible');
+      }
+      hideTextBoxes();
       ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
     }
   });
@@ -725,7 +789,7 @@ background: rgba(202, 12, 12, 0.692);
     const fontSize = parseInt(textEl.style.fontSize, 10);
     const weburl1 = window.ws1 ? window.ws1.url : null;
     const weburl2 = window.ws2 ? window.ws2.url : null;
-    ipcRenderer.send("reply-current-settings", { fontSize, weburl1, weburl2, hideOnStartup, magpieCompatibility });
+    ipcRenderer.send("reply-current-settings", { fontSize, weburl1, weburl2, hideOnStartup, magpieCompatibility, showHotkey, manualMode });
   })
 
   ipcRenderer.on('toggle-main-box', () => {
@@ -740,6 +804,23 @@ background: rgba(202, 12, 12, 0.692);
   ipcRenderer.on('magpie-window-info', (event, info) => {
     magpieWindowInfo = info;
     console.log('Received Magpie window info:', info);
+  });
+
+  ipcRenderer.on('new-manualmode', (event, newValue) => {
+    manualMode = newValue;
+    if (manualMode) {
+      manualModeActivatedOnce = false;
+      manualHotkeyPressed = false;
+      if (!pinned) {
+        document.body.classList.remove('force-visible');
+      }
+      hideTextBoxes();
+      ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
+    } else {
+      document.body.classList.add('force-visible');
+      showTextBoxes();
+      ipcRenderer.send('set-ignore-mouse-events', false);
+    }
   });
 
 </script>

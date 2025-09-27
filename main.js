@@ -5,7 +5,8 @@ const path = require('path');
 const magpie = require('./magpie');
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
-let shiftSpacePressed = false;
+let manualHotkeyPressed = false;
+let lastManualActivity = Date.now();
 let ext;
 let userSettings = {
   "fontSize": 42,
@@ -13,9 +14,14 @@ let userSettings = {
   "weburl2": "ws://localhost:55499",
   "hideOnStartup": false,
   "magpieCompatibility": false,
-  "enableManualMode": false,
-  "showHotkey": "Shift + Space"
+  "manualMode": false,
+  "showHotkey": "Shift + Space",
+  "pinned": false
 };
+let manualIn;
+let resizeMode = false;
+let yomitanShown = false;
+let mainWindow = null;
 
 if (fs.existsSync(settingsPath)) {
   try {
@@ -30,7 +36,56 @@ if (fs.existsSync(settingsPath)) {
 }
 
 function saveSettings() {
+  const data = fs.readFileSync(settingsPath, "utf-8");
+  oldUserSettings = JSON.parse(data);
+  console.log("Old Settings:", oldUserSettings);
+  console.log("New Settings:", userSettings);
   fs.writeFileSync(settingsPath, JSON.stringify(userSettings, null, 2))
+}
+
+function registerManualShowHotkey(oldHotkey) {
+  if (!userSettings.manualMode) return;
+  if (manualIn) globalShortcut.unregister(oldHotkey || userSettings.showHotkey);
+  
+  let clear = null;
+
+  // Manual hotkey enters mode on press, exits after timeout
+  manualIn = globalShortcut.register(userSettings.showHotkey, () => {
+    console.log("Manual hotkey pressed");
+    if (!userSettings.manualMode) {
+      globalShortcut.unregister(userSettings.showHotkey);
+      return;
+    }
+    if (mainWindow) {
+      // Enter manual mode and reset timer
+      manualHotkeyPressed = true;
+      lastManualActivity = Date.now();
+      // mainWindow.show();
+      mainWindow.webContents.send('show-overlay-hotkey', true);
+      mainWindow.setIgnoreMouseEvents(false, { forward: true });
+
+      if (userSettings.magpieCompatibility) {
+      mainWindow.show();
+      // mainWindow.blur();
+    }
+
+      // Clear existing timeout if any
+      let timeToWait = 500
+      if (clear) {
+        clearTimeout(clear);
+        timeToWait = 200; // Shorter timeout if already active
+      }
+      
+      clear = setTimeout(() => {
+        manualHotkeyPressed = false;
+        mainWindow.webContents.send('show-overlay-hotkey', false);
+        if (!yomitanShown && !resizeMode) {
+          mainWindow.blur();
+          mainWindow.setIgnoreMouseEvents(true, { forward: true });
+        }
+      }, timeToWait);
+    }
+  });
 }
 
 function openYomitanSettings() {
@@ -51,6 +106,13 @@ function openYomitanSettings() {
         event.preventDefault();
       }
     });
+    yomitanOptionsWin.show();
+    // Force a repaint to fix blank/transparent window issue
+    setTimeout(() => {
+      yomitanOptionsWin.setSize(yomitanOptionsWin.getSize()[0], yomitanOptionsWin.getSize()[1]);
+      yomitanOptionsWin.webContents.invalidate(); // Electron 21+ supports this
+      yomitanOptionsWin.show();
+    }, 500);
 }
 
 app.whenReady().then(async () => {
@@ -61,8 +123,7 @@ app.whenReady().then(async () => {
     const magpieInfo = await magpie.magpieGetInfo();
     const end = Date.now();
     // console.log(`Time taken to get magpie info: ${end - start}ms`);
-    const win = BrowserWindow.getAllWindows()[0];
-    win.webContents.send('magpie-window-info', magpieInfo);
+    mainWindow.webContents.send('magpie-window-info', magpieInfo);
   }, 5000); // Every 5 seconds
 
   const isDev = !app.isPackaged;
@@ -77,20 +138,18 @@ app.whenReady().then(async () => {
 
   globalShortcut.register('Alt+Shift+H', () => {
     // Send a message to the renderer process to toggle the main box
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      win.webContents.send('toggle-main-box');
+    if (mainWindow) {
+      mainWindow.webContents.send('toggle-main-box');
     }
   });
 
   globalShortcut.register('Alt+Shift+J', () => {
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      if (win.isMinimized()) {
-        win.restore();
-        win.blur();
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+        mainWindow.blur();
       }
-      else win.minimize();
+      else mainWindow.minimize();
     }
   });
 
@@ -101,38 +160,12 @@ app.whenReady().then(async () => {
   globalShortcut.register("Alt+Shift+M", () => {
     userSettings.magpieCompatibility = !userSettings.magpieCompatibility;
     saveSettings();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send("new-magpieCompatibility", userSettings.magpieCompatibility);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("new-magpieCompatibility", userSettings.magpieCompatibility);
     }
   })
 
-
-  // Shift+Space enters "shiftSpace mode" on press, exits on release.
-  // Electron globalShortcut requires a combination with a non-modifier key.
-  // Valid examples: 'Alt+Space', 'Ctrl+Shift+O', 'CommandOrControl+Shift+Y', etc.
-  // Modifier keys: 'CommandOrControl', 'Alt', 'Shift', 'Super'
-  // Non-modifier keys: Any single character, function keys (F1-F24), 'Space', etc.
-  // It cannot be just a modifier (e.g. 'Shift'), must include a regular key.
-  // Shift+Space enters "shiftSpace mode" on press, exits on release.
-  // globalShortcut.register('numadd', () => {
-  //   console.log("Numpad + pressed");
-  //   const win = BrowserWindow.getAllWindows()[0];
-  //   if (win) {
-  //     shiftSpacePressed = true;
-  //     win.webContents.send('shift-space-mode', true); // Enter mode
-  //     win.setIgnoreMouseEvents(false, { forward: true });
-  //   }
-  // });
-  
-  // globalShortcut.register('numadd', () => {}, () => {
-  //   console.log("Shift+Space released");
-  //   const win = BrowserWindow.getAllWindows()[0];
-  //   if (win && shiftSpacePressed) {
-  //     shiftSpacePressed = false;
-  //     win.webContents.send('shift-space-mode', false); // Exit mode
-  //     win.setIgnoreMouseEvents(true, { forward: true });
-  //   }
-  // });
+  registerManualShowHotkey();
   
 
   // On press down, toggle overlay on top and focused, on release, toggle back
@@ -155,7 +188,7 @@ app.whenReady().then(async () => {
   const display = screen.getPrimaryDisplay()
   const workArea = display.workArea
 
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     x: workArea.x,
     y: workArea.y,
     width: workArea.width + 1,
@@ -175,14 +208,12 @@ app.whenReady().then(async () => {
     },
     show: false,
   });
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  win.setAlwaysOnTop(true, "screen-saver");
-  let resizeMode = false;
-  let yomitanShown = false;
+  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  mainWindow.setAlwaysOnTop(true, "screen-saver");
   ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
-    // console.log("set-ignore-mouse-events", ignore, options, resizeMode, yomitanShown);
+    console.log("set-ignore-mouse-events", ignore, options, resizeMode, yomitanShown);
     if (!resizeMode && !yomitanShown) {
-      win.setIgnoreMouseEvents(ignore, options)
+      mainWindow.setIgnoreMouseEvents(ignore, options)
     }
     // if (ignore) {
     //   win.blur();
@@ -190,13 +221,13 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.on("hide", (event, state) => {
-    win.minimize();
+    mainWindow.minimize();
   });
 
   ipcMain.on("show", (event, state) => {
-    win.show();
-    win.setAlwaysOnTop(true, 'screen-saver');
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    mainWindow.show();
+    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   });
 
   ipcMain.on("resize-mode", (event, state) => {
@@ -207,52 +238,52 @@ app.whenReady().then(async () => {
   ipcMain.on("yomitan-event", (event, state) => {
     yomitanShown = state;
     if (state) {
-      win.setIgnoreMouseEvents(false, { forward: true });
+      mainWindow.setIgnoreMouseEvents(false, { forward: true });
       // win.setAlwaysOnTop(true, 'screen-saver');
     } else {
-      win.setIgnoreMouseEvents(true, { forward: true });
+      mainWindow.setIgnoreMouseEvents(true, { forward: true });
       // win.setAlwaysOnTop(true, 'screen-saver');
-      win.blur();
+      mainWindow.blur();
       // Blur again after a short delay to ensure it takes effect
       setTimeout(() => {
         if (!resizeMode && !yomitanShown) {
-          win.blur();
+          mainWindow.blur();
         }
       }, 100);
     }
   })
 
   ipcMain.on('release-mouse', () => {
-    win.blur();
-    setTimeout(() => win.focus(), 50);
+    mainWindow.blur();
+    setTimeout(() => mainWindow.focus(), 50);
   });
 
 
   // Fix for ghost title bar
   // https://github.com/electron/electron/issues/39959#issuecomment-1758736966
-  win.on('blur', () => {
-    win.setBackgroundColor('#00000000')
+  mainWindow.on('blur', () => {
+    mainWindow.setBackgroundColor('#00000000')
   })
 
-  win.on('focus', () => {
-    win.setBackgroundColor('#00000000')
+  mainWindow.on('focus', () => {
+    mainWindow.setBackgroundColor('#00000000')
   })
 
-  win.loadFile('index.html');
+  mainWindow.loadFile('index.html');
   if (isDev) {
-    win.webContents.on('context-menu', () => {
-      win.webContents.openDevTools({ mode: 'detach' });
+    mainWindow.webContents.on('context-menu', () => {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
 
     });
   }
-  win.once('ready-to-show', () => {
-    win.show();
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
     if (isDev) {
-      win.openDevTools({ mode: 'detach' });
+      mainWindow.openDevTools({ mode: 'detach' });
     }
-    win.webContents.send("load-settings", userSettings);
-    win.setAlwaysOnTop(true, 'screen-saver');
-    win.setIgnoreMouseEvents(true, { forward: true });
+    mainWindow.webContents.send("load-settings", userSettings);
+    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    mainWindow.setIgnoreMouseEvents(true, { forward: true });
   });
 
   ipcMain.on("app-close", () => {
@@ -260,7 +291,7 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.on("app-minimize", () => {
-    win.minimize();
+    mainWindow.minimize();
   });
 
   ipcMain.on("open-yomitan-settings", () => {
@@ -279,10 +310,10 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.on("open-settings", () => {
-    if (win && !win.isDestroyed()) {
-      win.webContents.send("force-visible", true); // ✅ Show overlay
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("force-visible", true); // ✅ Show overlay
     }
-    win.webContents.send("request-current-settings");
+    mainWindow.webContents.send("request-current-settings");
     ipcMain.once("reply-current-settings", (event, settings) => {
       const settingsWin = new BrowserWindow({
         width: 500,
@@ -295,12 +326,33 @@ app.whenReady().then(async () => {
           contextIsolation: false
         },
       });
+
+      settingsWin.webContents.setWindowOpenHandler(({ url }) => {
+              const child = new BrowserWindow({
+                  parent: settingsWin ? settingsWin : undefined,
+                  show: true,
+                  width: 1200,
+                  height: 980,
+                  webPreferences: {
+                      nodeIntegration: true,
+                      contextIsolation: false,
+                      devTools: true,
+                      nodeIntegrationInSubFrames: true,
+                      backgroundThrottling: false,
+                  },
+              });
+              child.setMenu(null); // Remove menu
+              child.loadURL(url);
+              return { action: 'deny' }; // Prevent Electron's default window creation
+          });
+
+      
       settingsWin.removeMenu()
 
       settingsWin.loadFile("settings.html");
       settingsWin.on("closed", () => {
-        if (win && !win.isDestroyed()) {
-          win.webContents.send("force-visible", false);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("force-visible", false);
         }
       })
       const closedListenerFunction = (event, type) => {
@@ -318,60 +370,77 @@ app.whenReady().then(async () => {
         ipcMain.removeListener("websocket-closed", closedListenerFunction)
         ipcMain.removeListener("websocket-opened", openedListenerFunction)
       })
+      setTimeout(() => {
+      settingsWin.setSize(settingsWin.getSize()[0], settingsWin.getSize()[1]);
+      settingsWin.webContents.invalidate(); // Electron 21+ supports this
+      settingsWin.show();
+    }, 500);
     })
 
 
   });
   ipcMain.on("fontsize-changed", (event, newsize) => {
-    win.webContents.send("new-fontsize", newsize);
+    mainWindow.webContents.send("new-fontsize", newsize);
     userSettings.fontSize = newsize;
     saveSettings();
   })
   ipcMain.on("weburl1-changed", (event, newurl) => {
     userSettings.weburl1 = newurl;
-    win.webContents.send("new-weburl1", newurl);
+    mainWindow.webContents.send("new-weburl1", newurl);
     saveSettings();
   })
   ipcMain.on("weburl2-changed", (event, newurl) => {
     userSettings.weburl2 = newurl;
-    win.webContents.send("new-weburl2", newurl);
+    mainWindow.webContents.send("new-weburl2", newurl);
     saveSettings();
   })
   ipcMain.on("hideonstartup-changed", (event, newValue) => {
     userSettings.hideOnStartup = newValue;
-    win.webContents.send("new-hideonstartup", newValue);
+    mainWindow.webContents.send("new-hideonstartup", newValue);
     saveSettings();
   })
   ipcMain.on("magpieCompatibility-changed", (event, newValue) => {
     userSettings.magpieCompatibility = newValue;
-    win.webContents.send("new-magpieCompatibility", newValue);
+    mainWindow.webContents.send("new-magpieCompatibility", newValue);
     saveSettings();
   })
   ipcMain.on("manualmode-changed", (event, newValue) => {
-    userSettings.enableManualMode = newValue;
-    win.webContents.send("new-manualmode", newValue);
-  saveSettings();
+    userSettings.manualMode = newValue;
+    console.log("manualmode-changed", newValue);
+    mainWindow.webContents.send("new-manualmode", newValue);
+    saveSettings();
+    registerManualShowHotkey();
   });
 
   ipcMain.on("showHotkey-changed", (event, newValue) => {
+    let oldValue = userSettings.showHotkey;
     userSettings.showHotkey = newValue;
-    win.webContents.send("new-showHotkey", newValue);
+    mainWindow.webContents.send("new-showHotkey", newValue);
+    saveSettings();
+    registerManualShowHotkey(oldValue);
+  });
+
+  ipcMain.on("pinned-changed", (event, newValue) => {
+    userSettings.pinned = newValue;
+    mainWindow.webContents.send("new-pinned", newValue);
     saveSettings();
   });
+
+
 
   // let alwaysOnTopInterval;
 
   ipcMain.on("text-recieved", (event, text) => {
     // If window is minimized, restore it
-    if (win.isMinimized()) {
-      win.setAlwaysOnTop(true, 'screen-saver');
-      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    if (mainWindow.isMinimized()) {
+      mainWindow.setAlwaysOnTop(true, 'screen-saver');
+      mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     } 
 
     // console.log(`magpieCompatibility: ${userSettings.magpieCompatibility}`);
     if (userSettings.magpieCompatibility) {
-      win.show();
-      win.blur();
+      mainWindow.show();
+      mainWindow.blur();
     }
     //   // Slightly adjust position to workaround Magpie stealing focus
     //   win.show();
