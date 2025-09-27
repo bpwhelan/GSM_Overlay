@@ -51,7 +51,7 @@ function registerManualShowHotkey(oldHotkey) {
 
   // Manual hotkey enters mode on press, exits after timeout
   manualIn = globalShortcut.register(userSettings.showHotkey, () => {
-    console.log("Manual hotkey pressed");
+    // console.log("Manual hotkey pressed");
     if (!userSettings.manualMode) {
       globalShortcut.unregister(userSettings.showHotkey);
       return;
@@ -211,7 +211,7 @@ app.whenReady().then(async () => {
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setAlwaysOnTop(true, "screen-saver");
   ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
-    console.log("set-ignore-mouse-events", ignore, options, resizeMode, yomitanShown);
+    // console.log("set-ignore-mouse-events", ignore, options, resizeMode, yomitanShown);
     if (!resizeMode && !yomitanShown) {
       mainWindow.setIgnoreMouseEvents(ignore, options)
     }
