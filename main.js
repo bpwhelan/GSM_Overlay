@@ -36,10 +36,12 @@ if (fs.existsSync(settingsPath)) {
 }
 
 function saveSettings() {
-  const data = fs.readFileSync(settingsPath, "utf-8");
-  oldUserSettings = JSON.parse(data);
-  console.log("Old Settings:", oldUserSettings);
-  console.log("New Settings:", userSettings);
+  if (fs.existsSync(settingsPath)) {
+    const data = fs.readFileSync(settingsPath, "utf-8");
+    oldUserSettings = JSON.parse(data);
+    console.log("Old Settings:", oldUserSettings);
+    console.log("New Settings:", userSettings);
+  }
   fs.writeFileSync(settingsPath, JSON.stringify(userSettings, null, 2))
 }
 
