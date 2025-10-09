@@ -188,19 +188,21 @@ app.whenReady().then(async () => {
   });
 
   const display = screen.getPrimaryDisplay()
-  const workArea = display.workArea
+
+  console.log(display);
 
   mainWindow = new BrowserWindow({
-    x: workArea.x,
-    y: workArea.y,
-    width: workArea.width + 1,
-    height: workArea.height + 1,
+    x: display.bounds.x,
+    y: display.bounds.y,
+    width: display.bounds.width + 1,
+    height: display.bounds.height + 1,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
     resizable: false,
     titleBarStyle: 'hidden',
     title: "",
+    fullscreen: false,
     // focusable: false,
     webPreferences: {
       contextIsolation: false,
@@ -284,6 +286,7 @@ app.whenReady().then(async () => {
       mainWindow.openDevTools({ mode: 'detach' });
     }
     mainWindow.webContents.send("load-settings", userSettings);
+    mainWindow.webContents.send("display-info", display);
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
     mainWindow.setIgnoreMouseEvents(true, { forward: true });
   });
@@ -428,7 +431,11 @@ app.whenReady().then(async () => {
     saveSettings();
   });
 
-
+  ipcMain.on("config-received", (event, config) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      activeWindow = config.activeWindow || false;
+    }
+  });
 
   // let alwaysOnTopInterval;
 

@@ -272,6 +272,12 @@ background: rgba(202, 12, 12, 0.692);
   let manualMode = false;
   let showHotkey = "Shift + Space";
   let manualHotkeyPressed = false;
+  let width = 2560;
+  let height = 1440;
+  let workArea = { x: 0, y: 0, width: 2560, height: 1440 };
+  let workAreaWidth = 2560;
+  let workAreaHeight = 1392;
+  let workAreaAdjustment = (workAreaHeight / height - 1) * -1;
 
   dragBar.addEventListener("mousedown", (e) => {
     const rect = mainBox.getBoundingClientRect();
@@ -322,6 +328,10 @@ background: rgba(202, 12, 12, 0.692);
           data = event.data;
         }
 
+        if (data.config) {
+          ipcRenderer.send("config-received", data.config);
+        }
+
         // Clear existing text boxes
         const mainBoxBounds = mainBox.getBoundingClientRect();
         clearTextBoxes();
@@ -353,11 +363,18 @@ background: rgba(202, 12, 12, 0.692);
               let x3 = usePercentage ? rect.x3 * 100 : rect.x3;
               let y3 = usePercentage ? rect.y3 * 100 : rect.y3;
 
+              console.log(workAreaAdjustment);
+              
+              if (workAreaAdjustment > 0) {
+                y1 *= 1 + workAreaAdjustment;
+                y3 *= 1 + workAreaAdjustment;
+              }
+
               minx = Math.min(minx, x1);
               miny = Math.min(miny, y1);
               maxx = Math.max(maxx, x3);
               maxy = Math.max(maxy, y3);
-              const box = createTextBox(word.text, x1, y1, x3, y3, 0, true, true, false);
+              const box = createTextBox(word.text, x1, Math.min(97, y1), x3, y3, 0, true, true, false);
               // Disable pointer events and set display:none by default
               document.body.appendChild(box);
               const boundBox = box.getBoundingClientRect();
@@ -487,9 +504,9 @@ background: rgba(202, 12, 12, 0.692);
   setInterval(checkAndReconnectWebSockets, 1000); // Check every 10 seconds
 
   function getCoordinatesFromPercentage(x, y) {
-    // hardcoded 2560x1392 for now
+    // hardcoded 2560x1440 for now
     const hardcodedWidth = 2560;
-    const hardcodedHeight = 1392;
+    const hardcodedHeight = 1440;
 
     return { x: x / 100 * hardcodedWidth, y: y / 100 * hardcodedHeight };
   }
@@ -686,6 +703,18 @@ background: rgba(202, 12, 12, 0.692);
       }, 1000);
     }
   })
+
+  ipcRenderer.on('display-info', (event, newDisplay) => {
+    display = newDisplay;
+    width = display.size.width;
+    height = display.size.height;
+    workArea = display.workArea;
+    workAreaWidth = workArea.width;
+    workAreaHeight = workArea.height;
+    workAreaAdjustment = (workAreaHeight / height - 1) * -1;
+    console.log("Display info updated:", display);
+    console.log(`Work area adjustment factor: ${workAreaAdjustment}`);
+  });
 
   ipcRenderer.on("new-fontsize", (event, newsize) => {
     textEl.style.fontSize = `${newsize}px`;
