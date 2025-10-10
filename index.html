@@ -363,18 +363,18 @@ background: rgba(202, 12, 12, 0.692);
               let x3 = usePercentage ? rect.x3 * 100 : rect.x3;
               let y3 = usePercentage ? rect.y3 * 100 : rect.y3;
 
-              console.log(workAreaAdjustment);
+              // console.log(workAreaAdjustment);
               
-              if (workAreaAdjustment > 0) {
-                y1 *= 1 + workAreaAdjustment;
-                y3 *= 1 + workAreaAdjustment;
-              }
+              // if (workAreaAdjustment > 0) {
+              //   y1 *= 1 + workAreaAdjustment;
+              //   y3 *= 1 + workAreaAdjustment;
+              // }
 
               minx = Math.min(minx, x1);
               miny = Math.min(miny, y1);
               maxx = Math.max(maxx, x3);
               maxy = Math.max(maxy, y3);
-              const box = createTextBox(word.text, x1, Math.min(97, y1), x3, y3, 0, true, true, false);
+              const box = createTextBox(word.text, x1, y1, x3, y3, 0, true, true, false);
               // Disable pointer events and set display:none by default
               document.body.appendChild(box);
               const boundBox = box.getBoundingClientRect();
