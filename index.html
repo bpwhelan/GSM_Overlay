@@ -272,6 +272,7 @@ background: rgba(202, 12, 12, 0.692);
   let manualMode = false;
   let showHotkey = "Shift + Space";
   let manualHotkeyPressed = false;
+  let showTextBackground = false;
   let width = 2560;
   let height = 1440;
   let workArea = { x: 0, y: 0, width: 2560, height: 1440 };
@@ -364,7 +365,7 @@ background: rgba(202, 12, 12, 0.692);
               let y3 = usePercentage ? rect.y3 * 100 : rect.y3;
 
               // console.log(workAreaAdjustment);
-              
+
               // if (workAreaAdjustment > 0) {
               //   y1 *= 1 + workAreaAdjustment;
               //   y3 *= 1 + workAreaAdjustment;
@@ -388,17 +389,25 @@ background: rgba(202, 12, 12, 0.692);
               box.style.fontSize = `${fontSize}px`;
             });
 
+            // Create aesthetic line box for background/border
+            let lineBox = document.createElement("div");
+            lineBox.className = "line-box";
+            lineBox.style.position = "absolute";
+            lineBox.style.pointerEvents = "none";
+            lineBox.style.zIndex = "998"; // Below text boxes but above background
+
             // Transform coordinates for bigInteractiveArea if Magpie window info is available
             if (magpieWindowInfo) {
               const topLeft = transformCoordinates(minx, miny, usePercentage);
               const bottomRight = transformCoordinates(maxx, maxy, usePercentage);
-              // const originalTopLeft = getCoordinatesFromPercentage(minx, miny);
-              // const originalBottomRight = getCoordinatesFromPercentage(maxx, maxy);
-              // Disable original topLeft/bottomRight for testing
-              // minx = Math.min(originalTopLeft.x - 50, topLeft.x - 50);
-              // miny = Math.min(originalTopLeft.y - 50, topLeft.y - 50);
-              // maxx = Math.max(originalBottomRight.x + 50, bottomRight.x + 50);
-              // maxy = Math.max(originalBottomRight.y + 50, bottomRight.y + 50);
+
+              // Position line box
+              lineBox.style.left = `${topLeft.x - 2}px`;
+              lineBox.style.top = `${topLeft.y - 2}px`;
+              lineBox.style.width = `${bottomRight.x - topLeft.x + 4}px`;
+              lineBox.style.height = `${bottomRight.y - topLeft.y + 4}px`;
+
+              // Position big interactive area
               minx = topLeft.x - 25;
               miny = topLeft.y - 25;
               maxx = bottomRight.x + 25;
@@ -408,19 +417,47 @@ background: rgba(202, 12, 12, 0.692);
               bigInteractiveArea.style.top = `${miny}px`;
               bigInteractiveArea.style.width = `${maxx - minx}px`;
               bigInteractiveArea.style.height = `${maxy - miny}px`;
-            } else if (magpieCompatibility) {
-              minx -= usePercentage ? 5 : 100;
-              miny -= usePercentage ? 20 : 100;
-              maxx += usePercentage ? 5 : 100;
-              maxy += usePercentage ? 5 : 100;
-              bigInteractiveArea.style.position = "absolute";
-              bigInteractiveArea.style.left = usePercentage ? `${minx}%` : `${minx}px`;
-              bigInteractiveArea.style.top = usePercentage ? `${miny}%` : `${miny}px`;
-              bigInteractiveArea.style.width = usePercentage ? `${maxx - minx}%` : `${maxx - minx}px`;
-              bigInteractiveArea.style.height = usePercentage ? `${maxy - miny}%` : `${maxy - miny}px`;
+            } else {
+              // Position line box
+              let lineMinx = usePercentage ? minx - 0.2 : minx - 2;
+              let lineMiny = usePercentage ? miny - 0.2 : miny - 2;
+              let lineMaxx = usePercentage ? maxx + 0.2 : maxx + 2;
+              let lineMaxy = usePercentage ? maxy + 0.2 : maxy + 2;
+
+              lineBox.style.left = usePercentage ? `${lineMinx}%` : `${lineMinx}px`;
+              lineBox.style.top = usePercentage ? `${lineMiny}%` : `${lineMiny}px`;
+              lineBox.style.width = usePercentage ? `${lineMaxx - lineMinx}%` : `${lineMaxx - lineMinx}px`;
+              lineBox.style.height = usePercentage ? `${lineMaxy - lineMiny}%` : `${lineMaxy - lineMiny}px`;
+
+              if (magpieCompatibility) {
+                minx -= usePercentage ? 5 : 100;
+                miny -= usePercentage ? 20 : 100;
+                maxx += usePercentage ? 5 : 100;
+                maxy += usePercentage ? 5 : 100;
+                bigInteractiveArea.style.position = "absolute";
+                bigInteractiveArea.style.left = usePercentage ? `${minx}%` : `${minx}px`;
+                bigInteractiveArea.style.top = usePercentage ? `${miny}%` : `${miny}px`;
+                bigInteractiveArea.style.width = usePercentage ? `${maxx - minx}%` : `${maxx - minx}px`;
+                bigInteractiveArea.style.height = usePercentage ? `${maxy - miny}%` : `${maxy - miny}px`;
+              }
             }
 
-            // Disable mouse events and set display:none by default
+            // Apply styling based on showTextBackground setting
+            lineBox.style.transition = 'border-color 2s ease-out, background-color 2s ease-out';
+            if (showTextBackground) {
+              lineBox.style.border = '1px solid rgba(255, 0, 0, 0.6)';
+
+              // Fade out border over 2 seconds
+              setTimeout(() => {
+                lineBox.style.borderColor = 'rgba(255, 0, 0, 0)';
+              }, 100);
+            } else {
+              lineBox.style.background = 'rgba(0, 0, 0, 0)';
+              lineBox.style.border = 'none';
+            }
+
+            // Add line box and big interactive area to DOM
+            document.body.appendChild(lineBox);
             document.body.appendChild(bigInteractiveArea);
           });
 
@@ -468,10 +505,9 @@ background: rgba(202, 12, 12, 0.692);
     textBox.style.lineHeight = 'normal';
     textBox.style.textOverflow = 'ellipsis';
 
-    // Remove background if word-level
-    if (noBackground) {
-      textBox.style.background = 'rgba(0,0,0,0)';
-    }
+    // Apply background based on setting - no individual borders anymore
+    textBox.style.background = 'rgba(0,0,0,0)';
+    textBox.style.border = 'none';
     // Make text transparent if requested
     if (transparentText) {
       textBox.style.color = 'rgba(255,255,255,0)';
@@ -607,10 +643,12 @@ background: rgba(202, 12, 12, 0.692);
     const existingLineBreaks = document.querySelectorAll('br');
     const bigAreas = document.querySelectorAll('.big-interactive-area');
     const spacers = document.querySelectorAll('.spacer');
+    const lineBoxes = document.querySelectorAll('.line-box');
     existingLineBreaks.forEach(br => br.remove());
     existingBoxes.forEach(box => box.remove());
     bigAreas.forEach(area => area.remove());
     spacers.forEach(spacer => spacer.remove());
+    lineBoxes.forEach(lineBox => lineBox.remove());
   }
 
   function hideTextBoxes() {
@@ -618,6 +656,8 @@ background: rgba(202, 12, 12, 0.692);
     existingBoxes.forEach(box => box.style.display = 'none');
     const bigAreas = document.querySelectorAll('.big-interactive-area');
     bigAreas.forEach(area => area.style.display = 'none');
+    const lineBoxes = document.querySelectorAll('.line-box');
+    lineBoxes.forEach(lineBox => lineBox.style.display = 'none');
   }
 
   function showTextBoxes() {
@@ -625,6 +665,8 @@ background: rgba(202, 12, 12, 0.692);
     existingBoxes.forEach(box => box.style.display = 'block');
     const bigAreas = document.querySelectorAll('.big-interactive-area');
     bigAreas.forEach(area => area.style.display = 'block');
+    const lineBoxes = document.querySelectorAll('.line-box');
+    lineBoxes.forEach(lineBox => lineBox.style.display = 'block');
   }
 
   let resizeMode = false;
@@ -675,6 +717,7 @@ background: rgba(202, 12, 12, 0.692);
     manualMode = newsettings.manualMode;
     showHotkey = newsettings.showHotkey;
     pinned = newsettings.pinned;
+    showTextBackground = newsettings.showTextBackground || false;
 
     if (pinned) {
       document.body.classList.add("force-visible");
@@ -715,6 +758,146 @@ background: rgba(202, 12, 12, 0.692);
     console.log("Display info updated:", display);
     console.log(`Work area adjustment factor: ${workAreaAdjustment}`);
   });
+
+  // Unified settings update handler
+  ipcRenderer.on("settings-updated", (event, updatedSettings) => {
+    console.log("Settings updated:", updatedSettings);
+
+    Object.keys(updatedSettings).forEach(key => {
+      const value = updatedSettings[key];
+
+      switch (key) {
+        case "fontSize":
+          textEl.style.fontSize = `${value}px`;
+          break;
+        case "weburl1":
+          setupWebSocket(value, true);
+          break;
+        case "weburl2":
+          setupWebSocket(value, false);
+          break;
+        case "hideOnStartup":
+          hideOnStartup = value;
+          break;
+        case "magpieCompatibility":
+          updateMagpieCompatibility(value);
+          break;
+        case "manualMode":
+          updateManualMode(value);
+          break;
+        case "showHotkey":
+          showHotkey = value;
+          break;
+        case "pinned":
+          updatePinnedState(value);
+          break;
+        case "showTextBackground":
+          updateTextBackground(value);
+          break;
+      }
+    });
+  });
+
+  function updateMagpieCompatibility(newValue) {
+    magpieCompatibility = newValue;
+    console.log("Magpie compatibility changed to:", magpieCompatibility);
+
+    if (magpieReleaseInterval) {
+      clearInterval(magpieReleaseInterval);
+      magpieReleaseInterval = null;
+    }
+
+    if (magpieCompatibility) {
+      magpieReleaseInterval = setInterval(() => {
+        if (!pinned && !yomitanShowing && !manualHotkeyPressed) {
+          ipcRenderer.send("set-ignore-mouse-events", true, { forward: true });
+        }
+      }, 1000);
+    }
+
+    // Update any UI elements or settings related to magpieCompatibility
+    const bigInteractiveAreas = document.querySelectorAll('.big-interactive-area');
+    bigInteractiveAreas.forEach(area => {
+      const left = parseFloat(area.style.left) || 0;
+      const top = parseFloat(area.style.top) || 0;
+      const width = parseFloat(area.style.width) || 0;
+      const height = parseFloat(area.style.height) || 0;
+
+      if (usePercentage) {
+        if (magpieCompatibility) {
+          area.style.left = (left - 5) + '%';
+          area.style.top = (top - 5) + '%';
+          area.style.width = (width + 10) + '%';
+          area.style.height = (height + 10) + '%';
+        } else {
+          area.style.left = left + '%';
+          area.style.top = top + '%';
+          area.style.width = width + '%';
+          area.style.height = height + '%';
+        }
+      }
+      else if (magpieCompatibility) {
+        area.style.left = (left - 100) + 'px';
+        area.style.top = (top - 100) + 'px';
+        area.style.width = (width + 200) + 'px';
+        area.style.height = (height + 200) + 'px';
+      } else {
+        area.style.left = (left + 100 - 10) + 'px';
+        area.style.top = (top + 100 - 10) + 'px';
+        area.style.width = (width - 200 + 20) + 'px';
+        area.style.height = (height - 200 + 20) + 'px';
+      }
+    });
+  }
+
+  function updateManualMode(newValue) {
+    manualMode = newValue;
+    if (manualMode) {
+      manualModeActivatedOnce = false;
+      manualHotkeyPressed = false;
+      if (!pinned) {
+        document.body.classList.remove('force-visible');
+      }
+      hideTextBoxes();
+      ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
+    } else {
+      document.body.classList.add('force-visible');
+      showTextBoxes();
+      ipcRenderer.send('set-ignore-mouse-events', false);
+    }
+  }
+
+  function updatePinnedState(newValue) {
+    pinned = newValue;
+    if (pinned) {
+      document.body.classList.add("force-visible");
+      document.getElementById("btn-pin").style.color = "#ddd2d2";
+    } else {
+      document.getElementById("btn-pin").style.color = "#ddd2d2a3";
+      document.body.classList.remove("force-visible");
+    }
+  }
+
+  function updateTextBackground(newValue) {
+    showTextBackground = newValue;
+    // Apply or remove background/border from existing line boxes
+    const lineBoxes = document.querySelectorAll('.line-box');
+    lineBoxes.forEach(lineBox => {
+      lineBox.style.transition = 'border-color 2s ease-out, background-color 2s ease-out';
+      if (showTextBackground) {
+        lineBox.style.border = '1px solid rgba(255, 0, 0, 0.6)';
+
+        // Fade out border after 3 seconds
+        setTimeout(() => {
+          lineBox.style.borderColor = 'rgba(255, 0, 0, 0)';
+          lineBox.style.background = 'rgba(0, 0, 0, 0)';
+        }, 1000);
+      } else {
+        lineBox.style.background = 'rgba(0, 0, 0, 0)';
+        lineBox.style.border = 'none';
+      }
+    });
+  }
 
   ipcRenderer.on("new-fontsize", (event, newsize) => {
     textEl.style.fontSize = `${newsize}px`;
@@ -818,7 +1001,7 @@ background: rgba(202, 12, 12, 0.692);
     const fontSize = parseInt(textEl.style.fontSize, 10);
     const weburl1 = window.ws1 ? window.ws1.url : null;
     const weburl2 = window.ws2 ? window.ws2.url : null;
-    ipcRenderer.send("reply-current-settings", { fontSize, weburl1, weburl2, hideOnStartup, magpieCompatibility, showHotkey, manualMode });
+    ipcRenderer.send("reply-current-settings", { fontSize, weburl1, weburl2, hideOnStartup, magpieCompatibility, showHotkey, manualMode, showTextBackground });
   })
 
   ipcRenderer.on('toggle-main-box', () => {
@@ -836,20 +1019,7 @@ background: rgba(202, 12, 12, 0.692);
   });
 
   ipcRenderer.on('new-manualmode', (event, newValue) => {
-    manualMode = newValue;
-    if (manualMode) {
-      manualModeActivatedOnce = false;
-      manualHotkeyPressed = false;
-      if (!pinned) {
-        document.body.classList.remove('force-visible');
-      }
-      hideTextBoxes();
-      ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
-    } else {
-      document.body.classList.add('force-visible');
-      showTextBoxes();
-      ipcRenderer.send('set-ignore-mouse-events', false);
-    }
+    updateManualMode(newValue);
   });
 
 </script>

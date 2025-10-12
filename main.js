@@ -16,12 +16,17 @@ let userSettings = {
   "magpieCompatibility": false,
   "manualMode": false,
   "showHotkey": "Shift + Space",
-  "pinned": false
+  "pinned": false,
+  "showTextBackground": false
 };
 let manualIn;
 let resizeMode = false;
 let yomitanShown = false;
 let mainWindow = null;
+let websocketStates = {
+  "ws1": false,
+  "ws2": false
+};
 
 if (fs.existsSync(settingsPath)) {
   try {
@@ -34,6 +39,46 @@ if (fs.existsSync(settingsPath)) {
 
   }
 }
+
+const GSM_APPDATA = process.env.APPDATA
+    ? path.join(process.env.APPDATA, "GameSentenceMiner") // Windows
+    : path.join(os.homedir(), '.config', "GameSentenceMiner"); // macOS/Linux
+
+function getGSMSettings() {
+  const gsmSettingsPath = path.join(GSM_APPDATA, 'config.json');
+  let gsmSettings = {};
+  if (fs.existsSync(gsmSettingsPath)) {
+    try {
+      const data = fs.readFileSync(gsmSettingsPath, "utf-8");
+      gsmSettings = JSON.parse(data);
+    } catch (error) {
+      console.error("Failed to load config.json:", error);
+    }
+  }
+  return gsmSettings;
+}
+
+function getGSMOverlaySettings() {
+  let gsmSettings = getGSMSettings();
+  if (gsmSettings.overlay) {
+    return gsmSettings.overlay;
+  }
+  return {
+    websocket_port: 55499,
+    engine: "lens",
+    monitor_to_capture: 0,
+    periodic: false,
+    periodic_interval: 3.0,
+    scan_delay: 0.25
+  }
+}
+
+function getCurrentOverlayMonitor() {
+  const overlaySettings = getGSMOverlaySettings();
+  return screen.getAllDisplays()[overlaySettings.monitor_to_capture];
+}
+
+let gsmSettings = getGSMSettings();
 
 function saveSettings() {
   if (fs.existsSync(settingsPath)) {
@@ -88,6 +133,74 @@ function registerManualShowHotkey(oldHotkey) {
       }, timeToWait);
     }
   });
+}
+
+function openSettings() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("force-visible", true);
+  }
+  mainWindow.webContents.send("request-current-settings");
+  ipcMain.once("reply-current-settings", (event, settings) => {
+    const settingsWin = new BrowserWindow({
+      width: 1200,
+      height: 980,
+      resizable: true,
+      alwaysOnTop: true,
+      title: "Overlay Settings",
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false
+      },
+    });
+
+    settingsWin.webContents.setWindowOpenHandler(({ url }) => {
+            const child = new BrowserWindow({
+                parent: settingsWin ? settingsWin : undefined,
+                show: true,
+                width: 1200,
+                height: 980,
+                webPreferences: {
+                    nodeIntegration: true,
+                    contextIsolation: false,
+                    devTools: true,
+                    nodeIntegrationInSubFrames: true,
+                    backgroundThrottling: false,
+                },
+            });
+            child.setMenu(null);
+            child.loadURL(url);
+            return { action: 'deny' };
+        });
+
+    settingsWin.removeMenu()
+
+    settingsWin.loadFile("settings.html");
+    settingsWin.on("closed", () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("force-visible", false);
+      }
+    })
+    const closedListenerFunction = (event, type) => {
+      settingsWin.send("websocket-closed", type)
+    }
+    const openedListenerFunction = (event, type) => {
+      settingsWin.send("websocket-opened", type);
+    };
+    ipcMain.on("websocket-closed", closedListenerFunction)
+    ipcMain.on("websocket-opened", openedListenerFunction)
+    console.log(websocketStates)
+    settingsWin.webContents.send("preload-settings", { settings, websocketStates })
+
+    settingsWin.on("closed", () => {
+      ipcMain.removeListener("websocket-closed", closedListenerFunction)
+      ipcMain.removeListener("websocket-opened", openedListenerFunction)
+    })
+    setTimeout(() => {
+    settingsWin.setSize(settingsWin.getSize()[0], settingsWin.getSize()[1]);
+    settingsWin.webContents.invalidate();
+    settingsWin.show();
+  }, 500);
+  })
 }
 
 function openYomitanSettings() {
@@ -159,6 +272,10 @@ app.whenReady().then(async () => {
     openYomitanSettings();
   });
 
+  globalShortcut.register('Alt+Shift+S', () => {
+    openSettings();
+  });
+
   globalShortcut.register("Alt+Shift+M", () => {
     userSettings.magpieCompatibility = !userSettings.magpieCompatibility;
     saveSettings();
@@ -187,15 +304,17 @@ app.whenReady().then(async () => {
     globalShortcut.unregisterAll();
   });
 
-  const display = screen.getPrimaryDisplay()
+  let display = getCurrentOverlayMonitor();
 
   console.log(display);
+
+  console.log("Display:", display);
 
   mainWindow = new BrowserWindow({
     x: display.bounds.x,
     y: display.bounds.y,
-    width: display.bounds.width + 1,
-    height: display.bounds.height + 1,
+    width: display.bounds.width,
+    height: display.bounds.height - 1,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
@@ -212,6 +331,36 @@ app.whenReady().then(async () => {
     },
     show: false,
   });
+
+  // Set bounds again to fix potential issue with wrong size on start
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const newDisplay = getCurrentOverlayMonitor();
+      mainWindow.setBounds({
+        x: newDisplay.bounds.x,
+        y: newDisplay.bounds.y,
+        width: newDisplay.bounds.width,
+        height: newDisplay.bounds.height - 1,
+      });
+      display = newDisplay;
+    }
+  }, 100);
+
+  // Detect Changes in display every 10 seconds
+  setInterval(() => {
+    const newDisplay = getCurrentOverlayMonitor();
+    if (newDisplay.id !== display.id) {
+      console.log("Display changed:", newDisplay);
+      display = newDisplay;
+      mainWindow.setBounds({
+        x: display.bounds.x,
+        y: display.bounds.y,
+        width: display.bounds.width + 1,
+        height: display.bounds.height + 1,
+      });
+    }
+  }, 10000);
+
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setAlwaysOnTop(true, "screen-saver");
   ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
@@ -303,10 +452,6 @@ app.whenReady().then(async () => {
     openYomitanSettings();
   });
 
-  let websocketStates = {
-    "ws1": false,
-    "ws2": false
-  }
   ipcMain.on("websocket-closed", (event, type) => {
     websocketStates[type] = false
   });
@@ -315,104 +460,65 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.on("open-settings", () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("force-visible", true); // ✅ Show overlay
-    }
-    mainWindow.webContents.send("request-current-settings");
-    ipcMain.once("reply-current-settings", (event, settings) => {
-      const settingsWin = new BrowserWindow({
-        width: 500,
-        height: 400,
-        resizable: true,
-        alwaysOnTop: true,
-        title: "Overlay Settings",
-        webPreferences: {
-          nodeIntegration: true,
-          contextIsolation: false
-        },
-      });
-
-      settingsWin.webContents.setWindowOpenHandler(({ url }) => {
-              const child = new BrowserWindow({
-                  parent: settingsWin ? settingsWin : undefined,
-                  show: true,
-                  width: 1200,
-                  height: 980,
-                  webPreferences: {
-                      nodeIntegration: true,
-                      contextIsolation: false,
-                      devTools: true,
-                      nodeIntegrationInSubFrames: true,
-                      backgroundThrottling: false,
-                  },
-              });
-              child.setMenu(null); // Remove menu
-              child.loadURL(url);
-              return { action: 'deny' }; // Prevent Electron's default window creation
-          });
-
-      
-      settingsWin.removeMenu()
-
-      settingsWin.loadFile("settings.html");
-      settingsWin.on("closed", () => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("force-visible", false);
-        }
-      })
-      const closedListenerFunction = (event, type) => {
-        settingsWin.send("websocket-closed", type)
-      }
-      const openedListenerFunction = (event, type) => {
-        settingsWin.send("websocket-opened", type);
-      };
-      ipcMain.on("websocket-closed", closedListenerFunction)
-      ipcMain.on("websocket-opened", openedListenerFunction)
-      console.log(websocketStates)
-      settingsWin.webContents.send("preload-settings", { settings, websocketStates })
-
-      settingsWin.on("closed", () => {
-        ipcMain.removeListener("websocket-closed", closedListenerFunction)
-        ipcMain.removeListener("websocket-opened", openedListenerFunction)
-      })
-      setTimeout(() => {
-      settingsWin.setSize(settingsWin.getSize()[0], settingsWin.getSize()[1]);
-      settingsWin.webContents.invalidate(); // Electron 21+ supports this
-      settingsWin.show();
-    }, 500);
-    })
-
-
+    openSettings();
   });
+  ipcMain.on("setting-changed", (event, { key, value }) => {
+    console.log(`Setting changed: ${key} = ${value}`);
+    
+    // Update the userSettings object
+    const oldValue = userSettings[key];
+    userSettings[key] = value;
+    
+    // Handle special cases that need additional logic
+    switch (key) {
+      case "showHotkey":
+        registerManualShowHotkey(oldValue);
+        break;
+      case "manualMode":
+        registerManualShowHotkey();
+        break;
+      // Add other special cases here as needed
+    }
+    
+    // Send the updated setting to the main window
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("settings-updated", { [key]: value });
+    }
+    
+    // Save settings to disk
+    saveSettings();
+  });
+
+  // Legacy handlers for backward compatibility - can be removed after transition
   ipcMain.on("fontsize-changed", (event, newsize) => {
-    mainWindow.webContents.send("new-fontsize", newsize);
     userSettings.fontSize = newsize;
+    mainWindow.webContents.send("settings-updated", { fontSize: newsize });
     saveSettings();
   })
   ipcMain.on("weburl1-changed", (event, newurl) => {
     userSettings.weburl1 = newurl;
-    mainWindow.webContents.send("new-weburl1", newurl);
+    mainWindow.webContents.send("settings-updated", { weburl1: newurl });
     saveSettings();
   })
   ipcMain.on("weburl2-changed", (event, newurl) => {
     userSettings.weburl2 = newurl;
-    mainWindow.webContents.send("new-weburl2", newurl);
+    mainWindow.webContents.send("settings-updated", { weburl2: newurl });
     saveSettings();
   })
   ipcMain.on("hideonstartup-changed", (event, newValue) => {
     userSettings.hideOnStartup = newValue;
-    mainWindow.webContents.send("new-hideonstartup", newValue);
+    mainWindow.webContents.send("settings-updated", { hideOnStartup: newValue });
     saveSettings();
   })
   ipcMain.on("magpieCompatibility-changed", (event, newValue) => {
     userSettings.magpieCompatibility = newValue;
-    mainWindow.webContents.send("new-magpieCompatibility", newValue);
+    mainWindow.webContents.send("settings-updated", { magpieCompatibility: newValue });
     saveSettings();
   })
   ipcMain.on("manualmode-changed", (event, newValue) => {
     userSettings.manualMode = newValue;
     console.log("manualmode-changed", newValue);
-    mainWindow.webContents.send("new-manualmode", newValue);
+    mainWindow.webContents.send("settings-updated", { manualMode: newValue });
     saveSettings();
     registerManualShowHotkey();
   });
@@ -420,14 +526,20 @@ app.whenReady().then(async () => {
   ipcMain.on("showHotkey-changed", (event, newValue) => {
     let oldValue = userSettings.showHotkey;
     userSettings.showHotkey = newValue;
-    mainWindow.webContents.send("new-showHotkey", newValue);
+    mainWindow.webContents.send("settings-updated", { showHotkey: newValue });
     saveSettings();
     registerManualShowHotkey(oldValue);
   });
 
   ipcMain.on("pinned-changed", (event, newValue) => {
     userSettings.pinned = newValue;
-    mainWindow.webContents.send("new-pinned", newValue);
+    mainWindow.webContents.send("settings-updated", { pinned: newValue });
+    saveSettings();
+  });
+
+  ipcMain.on("showTextBackground-changed", (event, newValue) => {
+    userSettings.showTextBackground = newValue;
+    mainWindow.webContents.send("settings-updated", { showTextBackground: newValue });
     saveSettings();
   });
 
