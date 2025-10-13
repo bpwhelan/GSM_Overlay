@@ -183,8 +183,7 @@
                             Enable support for sending local web requests to fetch data from Yomitan.
                         </div>
                         <div class="settings-item-description">
-                            This option may send data outside of Yomitan to local applications that request it.
-                            <span data-show-for-browser="firefox firefox-mobile"><a href="https://addons.mozilla.org/en-US/firefox/addon/yomitan/privacy/">Privacy Policy</a></span>
+                            This option may send data outside of Yomitan to local applications that request it<span data-show-for-browser="firefox firefox-mobile"> (<a href="https://addons.mozilla.org/en-US/firefox/addon/yomitan/privacy/">Privacy Policy</a>)</span>.
                             <a tabindex="0" class="more-toggle more-only" data-parent-distance="4">More&hellip;</a>
                         </div>
                     </div>
@@ -477,10 +476,10 @@
                 <label class="toggle"><input type="checkbox" data-setting="scanning.selectText"><span class="toggle-body"><span class="toggle-track"></span><span class="toggle-knob"></span></span></label>
             </div>
         </div></div>
-        <div class="settings-item jpzhyue-only"><div class="settings-item-inner">
+        <div class="settings-item jpzhyueko-only"><div class="settings-item-inner">
             <div class="settings-item-left">
-                <div class="settings-item-label">Search text with non-Japanese, Chinese, or Cantonese characters</div>
-                <div class="settings-item-description">Only applies when language is set to Japanese, Chinese, or Cantonese.</div>
+                <div class="settings-item-label">Search text with non-Japanese, Chinese, or Korean characters</div>
+                <div class="settings-item-description">Only applies when language is set to Japanese, Chinese, Cantonese, or Korean.</div>
             </div>
             <div class="settings-item-right">
                 <label class="toggle"><input type="checkbox" data-setting="scanning.alphanumeric"><span class="toggle-body"><span class="toggle-track"></span><span class="toggle-knob"></span></span></label>
@@ -675,6 +674,62 @@
                     </div>
                     <div class="settings-item-right">
                         <input type="number" data-setting="scanning.hidePopupOnCursorExitDelay" min="0">
+                    </div>
+                </div></div>
+            </div>
+        </div>
+        <div class="settings-item advanced-only">
+            <div class="settings-item-inner">
+                <div class="settings-item-left">
+                    <div class="settings-item-label">Reduced motion scrolling</div>
+                    <div class="settings-item-description">Scrolls by a configurable height (similar to pagination), reducing animations. Useful on e-readers and e-ink screens.</div>
+                </div>
+                <div class="settings-item-right">
+                    <label class="toggle"><input type="checkbox"
+                        data-setting="scanning.reducedMotionScrolling"
+                        data-transform='{
+                            "type": "setVisibility",
+                            "selector": "#reduced-motion-scrolling-options",
+                            "condition": {"op": "===", "value": true}
+                        }'
+                    ><span class="toggle-body"><span class="toggle-track"></span><span class="toggle-knob"></span></span></label>
+                </div>
+            </div>
+            <div class="settings-item-children settings-item-children-group" id="reduced-motion-scrolling-options" hidden>
+                <div class="settings-item"><div class="settings-item-inner settings-item-inner-wrappable">
+                    <div class="settings-item-left">
+                        <div class="settings-item-label">Scale</div>
+                        <div class="settings-item-description">Percentage of the popup's height scrolled per step.</div>
+                    </div>
+                    <div class="settings-item-right">
+                        <select data-setting="scanning.reducedMotionScrollingScale"
+                            data-transform='[
+                                {"type": "toNumber", "step": "pre", "constraints": {"min": 0.4}},
+                                {"type": "toString", "step": "post"}
+                            ]'
+                        >
+                            <option value="0.4">40%</option>
+                            <option value="0.5">50%</option>
+                            <option value="0.6">60%</option>
+                            <option value="0.7">70%</option>
+                            <option value="0.8">80%</option>
+                            <option value="0.9">90%</option>
+                            <option value="1">100%</option>
+                        </select>
+                    </div>
+                </div></div>
+                <div class="settings-item"><div class="settings-item-inner settings-item-inner-wrappable">
+                    <div class="settings-item-left">
+                        <div class="settings-item-label">Swipe threshold</div>
+                        <div class="settings-item-description">Minimum distance on touch devices for a swipe to be recognized as scrolling. Lower values can feel more responsive but increase the chance for misinputs.</div>
+                    </div>
+                    <div class="settings-item-right">
+                        <div class="settings-item-group">
+                            <div class="settings-item-group-item">
+                                <div class="settings-item-group-item-label">px</div>
+                                <input type="number" class="short-width short-height" data-setting="scanning.reducedMotionScrollingSwipeThreshold" min="0">
+                            </div>
+                        </div>
                     </div>
                 </div></div>
             </div>
@@ -1466,8 +1521,7 @@
                 <div class="settings-item-label">Enable audio playback for terms</div>
                 <div class="settings-item-description">Show a clickable speaker icon next to search results.</div>
                 <div class="settings-item-description">
-                    This option may send term, reading, and/or language outside of Yomitan to fetch audio.
-                    <span data-show-for-browser="firefox firefox-mobile"><a href="https://addons.mozilla.org/en-US/firefox/addon/yomitan/privacy/">Privacy Policy</a></span>
+                    This option may send term, reading, and/or language outside of Yomitan to fetch audio<span data-show-for-browser="firefox firefox-mobile"> (<a href="https://addons.mozilla.org/en-US/firefox/addon/yomitan/privacy/">Privacy Policy</a>)</span>.
                 </div>
             </div>
             <div class="settings-item-right">
@@ -1572,8 +1626,7 @@
                     </div>
                     <div class="settings-item-description">Sentence words are parsed using a third-party program. Japanese only.</div>
                     <div class="settings-item-description">
-                        This option may send search query data outside of Yomitan for parsing.
-                        <span data-show-for-browser="firefox firefox-mobile"><a href="https://addons.mozilla.org/en-US/firefox/addon/yomitan/privacy/">Privacy Policy</a></span>
+                        This option may send search query data outside of Yomitan for parsing<span data-show-for-browser="firefox firefox-mobile"> (<a href="https://addons.mozilla.org/en-US/firefox/addon/yomitan/privacy/">Privacy Policy</a>)</span>.
                         <a tabindex="0" class="more-toggle more-only" data-parent-distance="4">More&hellip;</a>
                     </div>
                 </div>
@@ -1705,8 +1758,7 @@
                         <span>Connection status:</span>
                         <span id="anki-error-message">&hellip;</span> <a tabindex="0" id="anki-error-message-details-toggle" hidden>Details&hellip;</a>
                         <div class="settings-item-description">
-                            This option may send limited information about the current webpage, information contained in Yomitan dictionary entries, and/or relevant user settings outside of Yomitan to Anki.
-                            <span data-show-for-browser="firefox firefox-mobile"><a href="https://addons.mozilla.org/en-US/firefox/addon/yomitan/privacy/">Privacy Policy</a></span>
+                            This option may send limited information about the current webpage, information contained in Yomitan dictionary entries, and/or relevant user settings outside of Yomitan to Anki<span data-show-for-browser="firefox firefox-mobile"> (<a href="https://addons.mozilla.org/en-US/firefox/addon/yomitan/privacy/">Privacy Policy</a>)</span>.
                         </div>
                     </div>
                 </div>
@@ -1983,10 +2035,17 @@
                     </div>
                 </div>
                 <div class="settings-item-right">
-                    <select data-setting="anki.displayTagsAndFlags">
+                    <select data-setting="anki.displayTagsAndFlags"
+                        data-transform='{
+                            "type": "setVisibility",
+                            "selector": "#anki-target-tags-option",
+                            "condition": {"op": "===", "value": "custom"}
+                        }'
+                    >
                         <option value="never">Never</option>
                         <option value="always">Always</option>
                         <option value="non-standard">Non-standard</option>
+                        <option value="custom">Custom</option>
                     </select>
                 </div>
             </div>
@@ -1994,7 +2053,8 @@
                 <p>
                     When coming across a word that is already in an Anki deck, two buttons can appear that show
                     the tags and flags the card has. If set to <em>Non-standard</em>, all tags that are included in the
-                    <em>Card tags</em> option will be filtered out from the list. If no tags remain after filtering,
+                    <em>Card tags</em> option will be filtered out from the list. If set to <em>Custom</em>, only tags that are included in the
+                    <em>Target tags</em> option will be shown. If no tags remain after filtering,
                     then the tags button will not be shown. If no flags are found, the flags button will not be shown.
                 </p>
                 <p>
@@ -2002,6 +2062,31 @@
                 </p>
             </div>
         </div>
+        <div class="settings-item advanced-only"><div class="settings-item-inner">
+            <div class="settings-item-left">
+                <div class="settings-item-label">Force Anki sync on adding card</div>
+                <div class="settings-item-description">
+                        May cause issues when using in conjuction with Ankiconnect Android, and/or slow or metered connections.
+                    </div>
+            </div>
+            <div class="settings-item-right">
+                <label class="toggle"><input type="checkbox" data-setting="anki.forceSync"><span class="toggle-body"><span class="toggle-track"></span><span class="toggle-knob"></span></span></label>
+            </div>
+        </div></div>
+        <div class="settings-item advanced-only" id="anki-target-tags-option" hidden><div class="settings-item-inner settings-item-inner-wrappable">
+            <div class="settings-item-left">
+                <div class="settings-item-label">Target tags</div>
+                <div class="settings-item-description">List of space or comma separated tags.</div>
+            </div>
+            <div class="settings-item-right">
+                <input type="text" spellcheck="false" autocomplete="off" data-setting="anki.targetTags"
+                    data-transform='[
+                        {"type": "splitTags", "step": "pre"},
+                        {"type": "joinTags", "step": "post"}
+                    ]'
+                >
+            </div>
+        </div></div>
         <div class="settings-item settings-item-button" data-modal-action="show,anki-cards"><div class="settings-item-inner">
             <div class="settings-item-left">
                 <div class="settings-item-label">Configure Anki flashcards&hellip;</div>

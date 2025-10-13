@@ -407,7 +407,8 @@
                                     "volume",
                                     "autoPlay",
                                     "fallbackSoundType",
-                                    "sources"
+                                    "sources",
+                                    "enableDefaultAudioSources"
                                 ],
                                 "properties": {
                                     "enabled": {
@@ -466,6 +467,10 @@
                                             }
                                         },
                                         "default": []
+                                    },
+                                    "enableDefaultAudioSources": {
+                                        "type": "boolean",
+                                        "default": true
                                     }
                                 }
                             },
@@ -474,6 +479,7 @@
                                 "required": [
                                     "inputs",
                                     "preventMiddleMouse",
+                                    "preventBackForward",
                                     "selectText",
                                     "alphanumeric",
                                     "autoHideResults",
@@ -490,6 +496,9 @@
                                     "matchTypePrefix",
                                     "hidePopupOnCursorExit",
                                     "hidePopupOnCursorExitDelay",
+                                    "reducedMotionScrolling",
+                                    "reducedMotionScrollingScale",
+                                    "reducedMotionScrollingSwipeThreshold",
                                     "normalizeCssZoom",
                                     "scanWithoutMousemove",
                                     "scanResolution"
@@ -678,6 +687,35 @@
                                     "preventMiddleMouse": {
                                         "type": "object",
                                         "required": [
+                                            "onTextHover",
+                                            "onWebPages",
+                                            "onPopupPages",
+                                            "onSearchPages",
+                                            "onSearchQuery"
+                                        ],
+                                        "properties": {
+                                            "onWebPages": {
+                                                "type": "boolean",
+                                                "default": false
+                                            },
+                                            "onPopupPages": {
+                                                "type": "boolean",
+                                                "default": false
+                                            },
+                                            "onSearchPages": {
+                                                "type": "boolean",
+                                                "default": false
+                                            },
+                                            "onSearchQuery": {
+                                                "type": "boolean",
+                                                "default": false
+                                            }
+                                        }
+                                    },
+                                    "preventBackForward": {
+                                        "type": "object",
+                                        "required": [
+                                            "onTextHover",
                                             "onWebPages",
                                             "onPopupPages",
                                             "onSearchPages",
@@ -704,7 +742,7 @@
                                     },
                                     "selectText": {
                                         "type": "boolean",
-                                        "default": true
+                                        "default": false
                                     },
                                     "alphanumeric": {
                                         "type": "boolean",
@@ -770,6 +808,19 @@
                                         "type": "number",
                                         "minimum": 0,
                                         "default": 0
+                                    },
+                                    "reducedMotionScrolling": {
+                                        "type": "boolean",
+                                        "default": false
+                                    },
+                                    "reducedMotionScrollingScale": {
+                                        "type": "number",
+                                        "default": 1
+                                    },
+                                    "reducedMotionScrollingSwipeThreshold": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "default": 40
                                     },
                                     "normalizeCssZoom": {
                                         "type": "boolean",
@@ -941,9 +992,11 @@
                                     "fieldTemplates",
                                     "suspendNewCards",
                                     "displayTagsAndFlags",
+                                    "targetTags",
                                     "noteGuiMode",
                                     "apiKey",
-                                    "downloadTimeout"
+                                    "downloadTimeout",
+                                    "forceSync"
                                 ],
                                 "properties": {
                                     "enable": {
@@ -1092,8 +1145,15 @@
                                     },
                                     "displayTagsAndFlags": {
                                         "type": "string",
-                                        "enum": ["never", "always", "non-standard"],
+                                        "enum": ["never", "always", "non-standard", "custom"],
                                         "default": "never"
+                                    },
+                                    "targetTags": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        },
+                                        "default": []
                                     },
                                     "noteGuiMode": {
                                         "type": "string",
@@ -1108,6 +1168,10 @@
                                         "type": "number",
                                         "default": 0,
                                         "minimum": 0
+                                    },
+                                    "forceSync": {
+                                        "type": "boolean",
+                                        "default": false
                                     }
                                 }
                             },
@@ -1318,7 +1382,8 @@
         "global": {
             "type": "object",
             "required": [
-                "database"
+                "database",
+                "dataTransmissionConsentShown"
             ],
             "properties": {
                 "database": {
@@ -1332,6 +1397,10 @@
                             "default": false
                         }
                     }
+                },
+                "dataTransmissionConsentShown": {
+                    "type": "boolean",
+                    "default": false
                 }
             }
         }

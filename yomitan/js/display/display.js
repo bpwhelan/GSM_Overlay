@@ -356,6 +356,10 @@ export class Display extends EventDispatcher {
         }
 
         document.addEventListener('wheel', this._onWheel.bind(this), {passive: false});
+        if (this._contentScrollElement !== null) {
+            this._contentScrollElement.addEventListener('touchstart', this._onTouchStart.bind(this), {passive: true});
+            this._contentScrollElement.addEventListener('touchmove', this._onTouchMove.bind(this), {passive: false});
+        }
         if (this._closeButton !== null) {
             this._closeButton.addEventListener('click', this._onCloseButtonClick.bind(this), false);
         }
@@ -478,7 +482,10 @@ export class Display extends EventDispatcher {
                 delay: scanningOptions.delay,
                 scanLength: scanningOptions.length,
                 layoutAwareScan: scanningOptions.layoutAwareScan,
-                preventMiddleMouse: scanningOptions.preventMiddleMouse.onSearchQuery,
+                preventMiddleMouseOnPage: scanningOptions.preventMiddleMouse.onSearchQuery,
+                preventMiddleMouseOnTextHover: scanningOptions.preventMiddleMouse.onTextHover,
+                preventBackForwardOnPage: scanningOptions.preventBackForward.onSearchQuery,
+                preventBackForwardOnTextHover: scanningOptions.preventBackForward.onTextHover,
                 matchTypePrefix: false,
                 sentenceParsingOptions,
                 scanWithoutMousemove: scanningOptions.scanWithoutMousemove,
@@ -998,9 +1005,50 @@ export class Display extends EventDispatcher {
     }
 
     /**
+     * @param {TouchEvent} e
+     */
+    _onTouchStart(e) {
+        const scanningOptions = /** @type {import('settings').ProfileOptions} */ (this._options).scanning;
+        if (!scanningOptions.reducedMotionScrolling || e.touches.length !== 1) {
+            return;
+        }
+
+        const start = e.touches[0].clientY;
+        /**
+         * @param {TouchEvent} endEvent
+         */
+        const onTouchEnd = (endEvent) => {
+            this._contentScrollElement.removeEventListener('touchend', onTouchEnd);
+
+            const end = endEvent.changedTouches[0].clientY;
+            const delta = start - end;
+            const threshold = scanningOptions.reducedMotionScrollingSwipeThreshold;
+
+            if (delta > threshold) {
+                this._scrollByPopupHeight(1, scanningOptions.reducedMotionScrollingScale);
+            } else if (delta < -threshold) {
+                this._scrollByPopupHeight(-1, scanningOptions.reducedMotionScrollingScale);
+            }
+        };
+
+        this._contentScrollElement.addEventListener('touchend', onTouchEnd, {passive: true});
+    }
+
+    /**
+     * @param {TouchEvent} e
+     */
+    _onTouchMove = (e) => {
+        const scanningOptions = /** @type {import('settings').ProfileOptions} */ (this._options).scanning;
+        if (scanningOptions.reducedMotionScrolling && e.cancelable) {
+            e.preventDefault();
+        }
+    };
+
+    /**
      * @param {WheelEvent} e
      */
     _onWheel(e) {
+        const scanningOptions = /** @type {import('settings').ProfileOptions} */ (this._options).scanning;
         if (e.altKey) {
             if (e.deltaY !== 0) {
                 this._focusEntry(this._index + (e.deltaY > 0 ? 1 : -1), 0, true);
@@ -1008,6 +1056,9 @@ export class Display extends EventDispatcher {
             }
         } else if (e.shiftKey) {
             this._onHistoryWheel(e);
+        } else if (scanningOptions.reducedMotionScrolling) {
+            this._scrollByPopupHeight(e.deltaY > 0 ? 1 : -1, scanningOptions.reducedMotionScrollingScale);
+            e.preventDefault();
         }
     }
 
@@ -1059,15 +1110,16 @@ export class Display extends EventDispatcher {
      * @param {MouseEvent} e
      */
     _onDocumentElementClick(e) {
+        const enableBackForwardActions = this._options ? !(this._options.scanning.preventBackForward.onPopupPages) : true;
         switch (e.button) {
             case 3: // Back
-                if (this._history.hasPrevious()) {
+                if (enableBackForwardActions && this._history.hasPrevious()) {
                     e.preventDefault();
                     this._history.back();
                 }
                 break;
             case 4: // Forward
-                if (this._history.hasNext()) {
+                if (enableBackForwardActions && this._history.hasNext()) {
                     e.preventDefault();
                     this._history.forward();
                 }
@@ -1706,6 +1758,21 @@ export class Display extends EventDispatcher {
     }
 
     /**
+     *
+     * @param {number} direction
+     * @param {number} scale
+     */
+    _scrollByPopupHeight(direction, scale) {
+        const popupHeight = this._contentScrollElement.clientHeight;
+        const contentBottom = this._contentScrollElement.scrollHeight - popupHeight;
+        const scrollAmount = popupHeight * scale * direction;
+        const target = Math.min(this._windowScroll.y + scrollAmount, contentBottom);
+
+        this._windowScroll.stop();
+        this._windowScroll.toY(Math.max(0, target));
+    }
+
+    /**
      * @param {number} index
      * @param {number} sign
      * @returns {?number}
@@ -2085,8 +2152,12 @@ export class Display extends EventDispatcher {
             delay: scanningOptions.delay,
             scanLength: scanningOptions.length,
             layoutAwareScan: scanningOptions.layoutAwareScan,
-            preventMiddleMouse: false,
+            preventMiddleMouseOnPage: false,
+            preventMiddleMouseOnTextHover: false,
+            preventBackForwardOnPage: false,
+            preventBackForwardOnTextHover: false,
             sentenceParsingOptions,
+            pageType: this._pageType,
         });
 
         this._contentTextScanner.setEnabled(true);

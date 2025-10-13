@@ -187,6 +187,7 @@ export class Backend {
             ['openCrossFramePort',           this._onApiOpenCrossFramePort.bind(this)],
             ['getLanguageSummaries',         this._onApiGetLanguageSummaries.bind(this)],
             ['heartbeat',                    this._onApiHeartbeat.bind(this)],
+            ['forceSync',                    this._onApiForceSync.bind(this)],
         ]);
 
         /** @type {import('api').PmApiMap} */
@@ -206,7 +207,7 @@ export class Backend {
         ]));
 
         /** @type {YomitanApi} */
-        this._yomitanApi = new YomitanApi(this._apiMap);
+        this._yomitanApi = new YomitanApi(this._apiMap, this._offscreen);
     }
 
     /**
@@ -1110,6 +1111,17 @@ export class Backend {
 
     /** @type {import('api').ApiHandler<'heartbeat'>} */
     _onApiHeartbeat() {
+        return void 0;
+    }
+
+    /** @type {import('api').ApiHandler<'forceSync'>} */
+    async _onApiForceSync() {
+        try {
+            await this._anki.makeAnkiSync();
+        } catch (e) {
+            log.error(e);
+            throw e;
+        }
         return void 0;
     }
 
@@ -2340,7 +2352,7 @@ export class Backend {
         const {term, reading} = definitionDetails;
         if (term.length === 0 && reading.length === 0) { return null; }
 
-        const {sources, preferredAudioIndex, idleTimeout, languageSummary} = details;
+        const {sources, preferredAudioIndex, idleTimeout, languageSummary, enableDefaultAudioSources} = details;
         let data;
         let contentType;
         try {
@@ -2351,6 +2363,7 @@ export class Backend {
                 reading,
                 idleTimeout,
                 languageSummary,
+                enableDefaultAudioSources,
             ));
         } catch (e) {
             const error = this._getAudioDownloadError(e);
@@ -2671,7 +2684,9 @@ export class Backend {
             for (const {pattern, ignoreCase, replacement} of group) {
                 let patternRegExp;
                 try {
-                    patternRegExp = new RegExp(pattern, ignoreCase ? 'gi' : 'g');
+                    patternRegExp = ignoreCase ?
+                        new RegExp(pattern.replace(/['’]/g, "['’]"), 'gi') :
+                        new RegExp(pattern, 'g');
                 } catch (e) {
                     // Invalid pattern
                     continue;

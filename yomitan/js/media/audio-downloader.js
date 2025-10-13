@@ -86,11 +86,12 @@ export class AudioDownloader {
      * @param {string} reading
      * @param {?number} idleTimeout
      * @param {import('language').LanguageSummary} languageSummary
+     * @param {boolean} enableDefaultAudioSources
      * @returns {Promise<import('audio-downloader').AudioBinaryBase64>}
      */
-    async downloadTermAudio(sources, preferredAudioIndex, term, reading, idleTimeout, languageSummary) {
+    async downloadTermAudio(sources, preferredAudioIndex, term, reading, idleTimeout, languageSummary, enableDefaultAudioSources) {
         const errors = [];
-        const requiredAudioSources = this._getRequiredAudioSources(languageSummary.iso, sources);
+        const requiredAudioSources = enableDefaultAudioSources ? getRequiredAudioSources(languageSummary.iso, sources) : [];
         for (const source of [...sources, ...requiredAudioSources]) {
             let infoList = await this.getTermAudioInfoList(source, term, reading, languageSummary);
             if (typeof preferredAudioIndex === 'number') {
@@ -115,32 +116,6 @@ export class AudioDownloader {
     }
 
     // Private
-
-    /**
-     * @param {string} language
-     * @param {import('audio').AudioSourceInfo[]} sources
-     * @returns {import('audio').AudioSourceInfo[]}
-     */
-    _getRequiredAudioSources(language, sources) {
-        /** @type {Set<import('settings').AudioSourceType>} */
-        const requiredSources = language === 'ja' ?
-            new Set([
-                'jpod101',
-                'language-pod-101',
-                'jisho',
-            ]) :
-            new Set([
-                'lingua-libre',
-                'language-pod-101',
-                'wiktionary',
-            ]);
-
-        for (const {type} of sources) {
-            requiredSources.delete(type);
-        }
-
-        return [...requiredSources].map((type) => ({type, url: '', voice: ''}));
-    }
 
     /**
      * @param {string} url
@@ -636,4 +611,38 @@ export class AudioDownloader {
         });
         return await readResponseJson(response);
     }
+}
+
+/**
+ * @param {string} language
+ * @returns {Set<import('settings').AudioSourceType>}
+ */
+export function getRequiredAudioSourceList(language) {
+    return language === 'ja' ?
+        new Set([
+            'jpod101',
+            'language-pod-101',
+            'jisho',
+        ]) :
+        new Set([
+            'lingua-libre',
+            'language-pod-101',
+            'wiktionary',
+        ]);
+}
+
+/**
+ * @param {string} language
+ * @param {import('audio').AudioSourceInfo[]} sources
+ * @returns {import('audio').AudioSourceInfo[]}
+ */
+export function getRequiredAudioSources(language, sources) {
+    /** @type {Set<import('settings').AudioSourceType>} */
+    const requiredSources = getRequiredAudioSourceList(language);
+
+    for (const {type} of sources) {
+        requiredSources.delete(type);
+    }
+
+    return [...requiredSources].map((type) => ({type, url: '', voice: ''}));
 }

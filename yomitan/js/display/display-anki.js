@@ -91,6 +91,8 @@ export class DisplayAnki {
         this._audioDownloadIdleTimeout = null;
         /** @type {string[]} */
         this._noteTags = [];
+        /** @type {string[]} */
+        this._targetTags = [];
         /** @type {import('settings').AnkiCardFormat[]} */
         this._cardFormats = [];
         /** @type {import('settings').DictionariesOptions} */
@@ -109,6 +111,8 @@ export class DisplayAnki {
         this._onViewNotesButtonContextMenuBind = this._onViewNotesButtonContextMenu.bind(this);
         /** @type {(event: import('popup-menu').MenuCloseEvent) => void} */
         this._onViewNotesButtonMenuCloseBind = this._onViewNotesButtonMenuClose.bind(this);
+        /** @type {boolean} */
+        this._forceSync = false;
     }
 
     /** */
@@ -196,6 +200,7 @@ export class DisplayAnki {
             dictionaries,
             anki: {
                 tags,
+                targetTags,
                 duplicateScope,
                 duplicateScopeCheckAllModels,
                 duplicateBehavior,
@@ -206,6 +211,7 @@ export class DisplayAnki {
                 noteGuiMode,
                 screenshot: {format, quality},
                 downloadTimeout,
+                forceSync,
             },
             scanning: {length: scanLength},
         } = options;
@@ -224,9 +230,11 @@ export class DisplayAnki {
         this._scanLength = scanLength;
         this._noteGuiMode = noteGuiMode;
         this._noteTags = [...tags];
+        this._targetTags = [...targetTags];
         this._audioDownloadIdleTimeout = (Number.isFinite(downloadTimeout) && downloadTimeout > 0 ? downloadTimeout : null);
         this._cardFormats = cardFormats;
         this._dictionaries = dictionaries;
+        this._forceSync = forceSync;
 
         void this._updateAnkiFieldTemplates(options);
     }
@@ -506,6 +514,16 @@ export class DisplayAnki {
             for (const tag of this._noteTags) {
                 displayTags.delete(tag);
             }
+        } else if (this._displayTagsAndFlags === 'custom') {
+            const tagsToRemove = [];
+            for (const tag of displayTags) {
+                if (typeof tag === 'string' && !this._targetTags.includes(tag)) {
+                    tagsToRemove.push(tag);
+                }
+            }
+            for (const tag of tagsToRemove) {
+                displayTags.delete(tag);
+            }
         }
 
         if (displayTags.size > 0) {
@@ -763,6 +781,14 @@ export class DisplayAnki {
                 this._updateSaveButtonForDuplicateBehavior(button, [noteId]);
 
                 this._updateViewNoteButton(dictionaryEntryIndex, cardFormatIndex, [noteId]);
+
+                if (this._forceSync) {
+                    try {
+                        await this._display.application.api.forceSync();
+                    } catch (e) {
+                        allErrors.push(toError(e));
+                    }
+                }
             }
         }
     }
@@ -1067,13 +1093,14 @@ export class DisplayAnki {
      */
     _getAnkiNoteMediaAudioDetails(details) {
         if (details.type !== 'term') { return null; }
-        const {sources, preferredAudioIndex} = this._displayAudio.getAnkiNoteMediaAudioDetails(details.term, details.reading);
+        const {sources, preferredAudioIndex, enableDefaultAudioSources} = this._displayAudio.getAnkiNoteMediaAudioDetails(details.term, details.reading);
         const languageSummary = this._display.getLanguageSummary();
         return {
             sources,
             preferredAudioIndex,
             idleTimeout: this._audioDownloadIdleTimeout,
             languageSummary,
+            enableDefaultAudioSources,
         };
     }
 

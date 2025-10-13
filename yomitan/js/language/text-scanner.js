@@ -110,7 +110,13 @@ export class TextScanner extends EventDispatcher {
         /** @type {boolean} */
         this._layoutAwareScan = false;
         /** @type {boolean} */
-        this._preventMiddleMouse = false;
+        this._preventMiddleMouseOnPage = false;
+        /** @type {boolean} */
+        this._preventMiddleMouseOnTextHover = false;
+        /** @type {boolean} */
+        this._preventBackForwardOnPage = false;
+        /** @type {boolean} */
+        this._preventBackForwardOnTextHover = false;
         /** @type {boolean} */
         this._matchTypePrefix = false;
         /** @type {number} */
@@ -170,6 +176,8 @@ export class TextScanner extends EventDispatcher {
         this._yomitanIsChangingTextSelectionNow = false;
         /** @type {boolean} */
         this._userHasNotSelectedAnythingManually = true;
+        /** @type {boolean} */
+        this._isMouseOverText = false;
     }
 
     /** @type {boolean} */
@@ -262,11 +270,15 @@ export class TextScanner extends EventDispatcher {
         delay,
         scanLength,
         layoutAwareScan,
-        preventMiddleMouse,
+        preventMiddleMouseOnPage,
+        preventMiddleMouseOnTextHover,
+        preventBackForwardOnPage,
+        preventBackForwardOnTextHover,
         sentenceParsingOptions,
         matchTypePrefix,
         scanWithoutMousemove,
         scanResolution,
+        pageType,
     }) {
         if (Array.isArray(inputs)) {
             this._inputs = inputs.map((input) => this._convertInput(input));
@@ -287,13 +299,22 @@ export class TextScanner extends EventDispatcher {
             this._scanLength = scanLength;
         }
         if (typeof layoutAwareScan === 'boolean') {
-            this._layoutAwareScan = false; // force layoutAwareScan to false due weird behavior
+            this._layoutAwareScan = false;
         }
-        if (typeof preventMiddleMouse === 'boolean') {
-            this._preventMiddleMouse = preventMiddleMouse;
+        if (typeof preventMiddleMouseOnPage === 'boolean') {
+            this._preventMiddleMouseOnPage = preventMiddleMouseOnPage;
+        }
+        if (typeof preventMiddleMouseOnTextHover === 'boolean') {
+            this._preventMiddleMouseOnTextHover = preventMiddleMouseOnTextHover;
+        }
+        if (typeof preventBackForwardOnPage === 'boolean') {
+            this._preventBackForwardOnPage = preventBackForwardOnPage;
+        }
+        if (typeof preventBackForwardOnTextHover === 'boolean') {
+            this._preventBackForwardOnTextHover = preventBackForwardOnTextHover;
         }
         if (typeof matchTypePrefix === 'boolean') {
-            this._matchTypePrefix = matchTypePrefix;
+            this._matchTypePrefix = pageType === 'search' ? matchTypePrefix : false;
         }
         if (typeof scanWithoutMousemove === 'boolean') {
             this._scanWithoutMousemove = scanWithoutMousemove;
@@ -303,7 +324,7 @@ export class TextScanner extends EventDispatcher {
         }
         if (typeof sentenceParsingOptions === 'object' && sentenceParsingOptions !== null) {
             let {scanExtent, terminationCharacterMode, terminationCharacters} = sentenceParsingOptions;
-            terminationCharacterMode = "newlines" // force to newlines to get everything
+            terminationCharacterMode = 'newlines';
             if (typeof scanExtent === 'number') {
                 this._sentenceScanExtent = scanExtent;
             }
@@ -637,6 +658,22 @@ export class TextScanner extends EventDispatcher {
      * @param {PointerEvent} e
      * @returns {boolean|void}
      */
+    _onMouseUp(e) {
+        switch (e.button) {
+            case 3: // Back
+            case 4: // Forward
+                if (this._preventBackForwardOnPage || (this._preventBackForwardOnTextHover && this._isMouseOverText)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                break;
+        }
+    }
+
+    /**
+     * @param {PointerEvent} e
+     * @returns {boolean|void}
+     */
     _onMouseDown(e) {
         if (this._preventNextMouseDown) {
             this._preventNextMouseDown = false;
@@ -653,10 +690,9 @@ export class TextScanner extends EventDispatcher {
                 this._triggerClear('mousedown');
                 break;
             case 1: // Middle
-                if (this._preventMiddleMouse) {
+                if (this._preventMiddleMouseOnPage || (this._preventMiddleMouseOnTextHover && this._isMouseOverText)) {
                     e.preventDefault();
                     e.stopPropagation();
-                    return false;
                 }
                 break;
         }
@@ -709,9 +745,20 @@ export class TextScanner extends EventDispatcher {
         void this._searchAt(e.clientX, e.clientY, inputInfo);
     }
 
-    /** */
-    _onAuxClick() {
+    /**
+     * @param {PointerEvent} e
+     * @returns {boolean|void}
+     */
+    _onAuxClick(e) {
         this._preventNextContextMenu = false;
+        switch (e.button) {
+            case 1: // Middle
+                if (this._preventMiddleMouseOnPage || (this._preventMiddleMouseOnTextHover && this._isMouseOverText)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                break;
+        }
     }
 
     /**
@@ -1116,6 +1163,7 @@ export class TextScanner extends EventDispatcher {
             [this._node, 'pointerup', this._onPointerUp.bind(this), capture],
             [this._node, 'pointercancel', this._onPointerCancel.bind(this), capture],
             [this._node, 'pointerout', this._onPointerOut.bind(this), capture],
+            [this._node, 'mouseup', this._onMouseUp.bind(this), capture],
             [this._node, 'mousedown', this._onMouseDown.bind(this), capture],
             [this._node, 'touchmove', this._onTouchMove.bind(this), {passive: false, capture}],
             [this._node, 'touchend', this._onTouchEnd.bind(this), capture],
@@ -1303,11 +1351,13 @@ export class TextScanner extends EventDispatcher {
             });
             if (textSource !== null) {
                 try {
+                    this._isMouseOverText = true;
                     await this._search(textSource, searchTerms, searchKanji, inputInfo);
                 } finally {
                     textSource.cleanup();
                 }
             } else {
+                this._isMouseOverText = false;
                 this._triggerSearchEmpty(inputInfo);
             }
             safePerformance.mark('scanner:_searchAt:end');
@@ -1452,7 +1502,7 @@ export class TextScanner extends EventDispatcher {
         const modifiersSet = new Set(modifiers);
         for (let i = 0, ii = this._inputs.length; i < ii; ++i) {
             const input = this._inputs[i];
-            let {include, exclude, types} = input;
+            const {include, exclude, types} = input;
             if (!types.has(pointerType)) { continue; }
             if (this._setHasAll(modifiersSet, include) && (exclude.length === 0 || !this._setHasAll(modifiersSet, exclude))) {
                 if (include.length > 0) {

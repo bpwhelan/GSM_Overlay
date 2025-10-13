@@ -4,6 +4,26 @@
 
 https://github.com/yomidevs/yomitan/releases/latest
 
+
+## IMPORTANT: In popup.js, add event dispatchers for popup shown/hidden
+
+```javascript
+    /**
+     * @param {import('dynamic-property').EventArgument<boolean, 'change'>} event
+     */
+    _onVisibleChange({value}) {
+        if (this._visibleValue === value) { return; }
+        this._visibleValue = value;
+        this._frame.style.setProperty('visibility', value ? 'visible' : 'hidden', 'important');
+        void this._invokeSafe('displayVisibilityChanged', {value});
+        if (value) {
+            window.dispatchEvent(new CustomEvent('yomitan-popup-shown'));
+        } else {
+            window.dispatchEvent(new CustomEvent('yomitan-popup-hidden'));
+        }
+    }
+``` 
+
 ## Unzip the contents of the zip into `GSM_Overlay/yomitan/`
 
 ## Update `GSM_Overlay/yomitan/data/schemas/options-schema.json` to disable layoutAwareScan by default, this is due to weird behavior in overlay
@@ -17,6 +37,11 @@ https://github.com/yomidevs/yomitan/releases/latest
             "default": false
         }
     }
+
+                                        "selectText": {
+                                        "type": "boolean",
+                                        "default": false
+                                    },
 }
 ```
 
