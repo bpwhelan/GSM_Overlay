@@ -7,6 +7,7 @@ const magpie = require('./magpie');
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 let manualHotkeyPressed = false;
 let lastManualActivity = Date.now();
+let activityTimer = null;
 let ext;
 let userSettings = {
   "fontSize": 42,
@@ -17,7 +18,9 @@ let userSettings = {
   "manualMode": false,
   "showHotkey": "Shift + Space",
   "pinned": false,
-  "showTextBackground": false
+  "showTextBackground": false,
+  "focusOnHotkey": false,
+  "afkTimer": 5, // in minutes
 };
 let manualIn;
 let resizeMode = false;
@@ -111,7 +114,7 @@ function registerManualShowHotkey(oldHotkey) {
       mainWindow.webContents.send('show-overlay-hotkey', true);
       mainWindow.setIgnoreMouseEvents(false, { forward: true });
 
-      if (userSettings.magpieCompatibility) {
+    if (userSettings.magpieCompatibility || userSettings.focusOnHotkey) {
       mainWindow.show();
       // mainWindow.blur();
     }
@@ -133,6 +136,25 @@ function registerManualShowHotkey(oldHotkey) {
       }, timeToWait);
     }
   });
+}
+
+function resetActivityTimer() {
+  // Clear existing timer
+  if (activityTimer) {
+    clearTimeout(activityTimer);
+  }
+
+  if (userSettings.afkTimer === 0) {
+    return;
+  }
+
+  // Set new timer for 5 minutes
+  activityTimer = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      console.log("Auto-minimizing due to inactivity");
+      mainWindow.minimize();
+    }
+  }, userSettings.afkTimer * 60 * 1000);
 }
 
 function openSettings() {
@@ -189,7 +211,7 @@ function openSettings() {
     ipcMain.on("websocket-closed", closedListenerFunction)
     ipcMain.on("websocket-opened", openedListenerFunction)
     console.log(websocketStates)
-    settingsWin.webContents.send("preload-settings", { settings, websocketStates })
+    settingsWin.webContents.send("preload-settings", { userSettings, websocketStates })
 
     settingsWin.on("closed", () => {
       ipcMain.removeListener("websocket-closed", closedListenerFunction)
@@ -389,6 +411,9 @@ app.whenReady().then(async () => {
 
 
   ipcMain.on("yomitan-event", (event, state) => {
+    // Reset the activity timer on yomitan interaction
+    resetActivityTimer();
+    
     yomitanShown = state;
     if (state) {
       mainWindow.setIgnoreMouseEvents(false, { forward: true });
@@ -396,10 +421,12 @@ app.whenReady().then(async () => {
     } else {
       mainWindow.setIgnoreMouseEvents(true, { forward: true });
       // win.setAlwaysOnTop(true, 'screen-saver');
-      mainWindow.blur();
+      if (!manualHotkeyPressed) {
+        mainWindow.blur();
+      }
       // Blur again after a short delay to ensure it takes effect
       setTimeout(() => {
-        if (!resizeMode && !yomitanShown) {
+        if (!resizeMode && !yomitanShown && !manualHotkeyPressed) {
           mainWindow.blur();
         }
       }, 100);
@@ -438,6 +465,9 @@ app.whenReady().then(async () => {
     mainWindow.webContents.send("display-info", display);
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
     mainWindow.setIgnoreMouseEvents(true, { forward: true });
+    
+    // Start the activity timer
+    resetActivityTimer();
   });
 
   ipcMain.on("app-close", () => {
@@ -476,6 +506,9 @@ app.whenReady().then(async () => {
         break;
       case "manualMode":
         registerManualShowHotkey();
+        break;
+      case "afkTimer":
+        resetActivityTimer();
         break;
       // Add other special cases here as needed
     }
@@ -552,8 +585,13 @@ app.whenReady().then(async () => {
   // let alwaysOnTopInterval;
 
   ipcMain.on("text-recieved", (event, text) => {
+    // Reset the activity timer on text received
+    resetActivityTimer();
+    
     // If window is minimized, restore it
     if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+      mainWindow.blur();
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
       mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     } 
@@ -597,6 +635,10 @@ app.whenReady().then(async () => {
   });
 
   app.on("before-quit", () => {
+    // Clear activity timer on quit
+    if (activityTimer) {
+      clearTimeout(activityTimer);
+    }
     // clearInterval(alwaysOnTopInterval);
     fs.writeFileSync(settingsPath, JSON.stringify(userSettings, null, 2))
   });

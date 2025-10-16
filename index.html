@@ -158,6 +158,74 @@ background: rgba(202, 12, 12, 0.692);
   /* .big-interactive-area:hover {
     background: rgba(15, 15, 15, 0.1);
   } */
+
+  /* Loading Indicator Styles */
+  #loading-indicator {
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    width: 20px;
+    height: 20px;
+    z-index: 10000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  #loading-indicator.show {
+    opacity: 1;
+  }
+
+  #loading-indicator.fade-out {
+    opacity: 0;
+    transition: opacity 5s ease-out;
+  }
+
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top: 2px solid #00ff88;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  .checkmark {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #00ff88;
+    font-weight: bold;
+    text-shadow: 0 0 3px rgba(0, 255, 136, 0.5);
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  /* Alternative pulsing dot indicator */
+  .loading-dot {
+    width: 12px;
+    height: 12px;
+    background: #00ff88;
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { 
+      opacity: 0.4;
+      transform: scale(1);
+    }
+    50% { 
+      opacity: 1;
+      transform: scale(1.2);
+    }
+  }
 </style>
 
 <html>
@@ -171,6 +239,11 @@ background: rgba(202, 12, 12, 0.692);
 
 
 <body style="margin:0px;">
+  <!-- Text Loading Indicator -->
+  <div id="loading-indicator">
+    <div class="loading-spinner"></div>
+  </div>
+  
   <div id="main-box">
     <div draggable="false" id="draggable" , class="interactive">
       <button class="control-btn" id="btn-pin">⬤</button>
@@ -280,6 +353,61 @@ background: rgba(202, 12, 12, 0.692);
   let workAreaHeight = 1392;
   let workAreaAdjustment = (workAreaHeight / height - 1) * -1;
 
+  // Loading indicator functions
+  let loadingStartTime = null;
+
+  function showLoadingIndicator() {
+    const indicator = document.getElementById('loading-indicator');
+    if (indicator) {
+      // Reset any previous states
+      indicator.classList.remove('fade-out');
+      indicator.innerHTML = '<div class="loading-spinner"></div>';
+      indicator.classList.add('show');
+      loadingStartTime = Date.now(); // Record when loading started
+    }
+  }
+
+  function showReadyIndicator() {
+    const indicator = document.getElementById('loading-indicator');
+    if (indicator && loadingStartTime) {
+      const elapsedTime = Date.now() - loadingStartTime;
+      const minDisplayTime = 500; // Minimum 500ms spinner display
+      
+      const remainingTime = Math.max(0, minDisplayTime - elapsedTime);
+      
+      setTimeout(() => {
+        // Replace spinner with checkmark
+        indicator.innerHTML = '<div class="checkmark">✓</div>';
+        
+        // Start fade out after a brief moment
+        setTimeout(() => {
+          indicator.classList.add('fade-out');
+          
+          // Clean up after fade completes
+          setTimeout(() => {
+            indicator.classList.remove('show', 'fade-out');
+            loadingStartTime = null; // Reset timing
+          }, 5000);
+        }, 200);
+      }, remainingTime);
+    }
+  }
+
+  function hideLoadingIndicator() {
+    const indicator = document.getElementById('loading-indicator');
+    if (indicator) {
+      indicator.classList.remove('show', 'fade-out');
+      loadingStartTime = null;
+    }
+  }
+
+  // Auto-hide loading indicator after a delay
+  function hideLoadingIndicatorWithDelay(delay = 1500) {
+    setTimeout(() => {
+      hideLoadingIndicator();
+    }, delay);
+  }
+
   dragBar.addEventListener("mousedown", (e) => {
     const rect = mainBox.getBoundingClientRect();
     offsetX = e.clientX - rect.left;
@@ -341,6 +469,8 @@ background: rgba(202, 12, 12, 0.692);
 
         // Check if data has words array (new word-level coordinate format)
         if (Array.isArray(data) && data.every(item => item.text && item.bounding_rect)) {
+          // Show loading indicator when text processing starts
+          showLoadingIndicator();
           // Handle array of {text, bounding_rect}
           data.forEach(line => {
             const rect = line.bounding_rect;
@@ -459,6 +589,9 @@ background: rgba(202, 12, 12, 0.692);
             // Add line box and big interactive area to DOM
             document.body.appendChild(lineBox);
             document.body.appendChild(bigInteractiveArea);
+                    
+            // Show ready indicator (checkmark) after text processing is complete
+            showReadyIndicator();
           });
 
           // document.body.appendChild(bigInteractiveArea);
