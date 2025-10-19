@@ -280,6 +280,10 @@
         <span class="label-text">Auto-Minimize After Inactivity (minutes, 0 disables)</span>
         <input type="number" id="afkTimer" value="5" min="0" max="60" />
       </label>
+      <label>
+        <span class="label-text">Hide "Ready" Indicator</span>
+        <input type="checkbox" id="hideReadyIndicator" />
+      </label>
     </div>
 
     <div class="setting-group">
@@ -385,6 +389,10 @@
 
     document.getElementById("focusOnHotkey").addEventListener("change", (event) => {
       handleSettingChange("focusOnHotkey", event.target.checked);
+    });
+
+    document.getElementById("hideReadyIndicator").addEventListener("change", (event) => {
+      handleSettingChange("hideReadyIndicator", event.target.checked);
     });
 
     document.getElementById("afkTimer").addEventListener("input", (event) => {
@@ -593,6 +601,7 @@
         document.getElementById("showTextBackground").checked = showTextBackground;
         document.getElementById("focusOnHotkey").checked = focusOnHotkey;
         document.getElementById("afkTimer").value = afkTimer;
+        document.getElementById("hideReadyIndicator").checked = userSettings.hideReadyIndicator;
 
         // Handle Ctrl warnings for configured hotkey settings
         hotkeySettings.forEach(({ inputId, warningElementId, settingKey }) => {
@@ -678,6 +687,7 @@
       document.getElementById("showTextBackground").checked = showTextBackground;
       document.getElementById("focusOnHotkey").checked = focusOnHotkey;
       document.getElementById("afkTimer").value = afkTimer;
+      document.getElementById("hideReadyIndicator").checked = userSettings.hideReadyIndicator;
 
       // Show/hide Ctrl warning based on loaded hotkey
       const ctrlWarning = document.getElementById('ctrl-warning');

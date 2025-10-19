@@ -268,6 +268,7 @@ background: rgba(202, 12, 12, 0.692);
   // let currentY = 0;
   let magpieReleaseInterval = null;
   let manualModeActivatedOnce = false;
+  let hideReadyIndicator = false;
 
   // window.addEventListener('mousemove', (e) => {
   //   console.log("Mouse moved:", e.clientX, e.clientY);
@@ -470,7 +471,9 @@ background: rgba(202, 12, 12, 0.692);
         // Check if data has words array (new word-level coordinate format)
         if (Array.isArray(data) && data.every(item => item.text && item.bounding_rect)) {
           // Show loading indicator when text processing starts
-          showLoadingIndicator();
+          if (!hideReadyIndicator) {
+            showLoadingIndicator();
+          }
           // Handle array of {text, bounding_rect}
           data.forEach(line => {
             const rect = line.bounding_rect;
@@ -591,7 +594,8 @@ background: rgba(202, 12, 12, 0.692);
             document.body.appendChild(bigInteractiveArea);
                     
             // Show ready indicator (checkmark) after text processing is complete
-            showReadyIndicator();
+            if (!hideReadyIndicator)
+              showReadyIndicator();
           });
 
           // document.body.appendChild(bigInteractiveArea);
@@ -851,6 +855,7 @@ background: rgba(202, 12, 12, 0.692);
     showHotkey = newsettings.showHotkey;
     pinned = newsettings.pinned;
     showTextBackground = newsettings.showTextBackground || false;
+    hideReadyIndicator = newsettings.hideReadyIndicator;
 
     if (pinned) {
       document.body.classList.add("force-visible");
@@ -926,6 +931,9 @@ background: rgba(202, 12, 12, 0.692);
           break;
         case "showTextBackground":
           updateTextBackground(value);
+          break;
+        case "hideReadyIndicator":
+          hideReadyIndicator = value;
           break;
       }
     });

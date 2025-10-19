@@ -590,11 +590,17 @@ app.whenReady().then(async () => {
     
     // If window is minimized, restore it
     if (mainWindow.isMinimized()) {
-      mainWindow.restore();
+      mainWindow.show();
       mainWindow.blur();
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
       mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    } 
+      
+      // blur after a short delay too
+
+      setTimeout(() => {
+          mainWindow.blur();
+      }, 200);
+    }
 
     // console.log(`magpieCompatibility: ${userSettings.magpieCompatibility}`);
     if (userSettings.magpieCompatibility) {
