@@ -3,6 +3,7 @@ const { ipcMain } = require("electron");
 const fs = require("fs");
 const path = require('path');
 const magpie = require('./magpie');
+const bg = require('./background');
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 let manualHotkeyPressed = false;
@@ -253,15 +254,23 @@ function openYomitanSettings() {
 }
 
 app.whenReady().then(async () => {
-  // Setup a inf loop here that doesn't block so i can test code periodically
-  setInterval(async () => {
-    // track time it takes to get magpie info
-    const start = Date.now();
-    const magpieInfo = await magpie.magpieGetInfo();
-    const end = Date.now();
-    // console.log(`Time taken to get magpie info: ${end - start}ms`);
-    mainWindow.webContents.send('magpie-window-info', magpieInfo);
-  }, 5000); // Every 5 seconds
+  // Start background manager and register periodic tasks
+  bg.start();
+
+  // magpie polling task
+  bg.registerTask(async () => {
+    try {
+      const start = Date.now();
+      const magpieInfo = await magpie.magpieGetInfo();
+      const end = Date.now();
+      // console.log(`Time taken to get magpie info: ${end - start}ms`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('magpie-window-info', magpieInfo);
+      }
+    } catch (e) {
+      console.error('magpie poll failed', e);
+    }
+  }, 3000);
 
   const isDev = !app.isPackaged;
   const extPath = isDev ? path.join(__dirname, 'yomitan') : path.join(process.resourcesPath, "yomitan")
@@ -368,20 +377,26 @@ app.whenReady().then(async () => {
     }
   }, 100);
 
-  // Detect Changes in display every 10 seconds
-  setInterval(() => {
-    const newDisplay = getCurrentOverlayMonitor();
-    if (newDisplay.id !== display.id) {
-      console.log("Display changed:", newDisplay);
-      display = newDisplay;
-      mainWindow.setBounds({
-        x: display.bounds.x,
-        y: display.bounds.y,
-        width: display.bounds.width + 1,
-        height: display.bounds.height + 1,
-      });
+  // Detect Changes in display every 10 seconds via background manager
+  bg.registerTask(() => {
+    try {
+      const newDisplay = getCurrentOverlayMonitor();
+      if (newDisplay.id !== display.id) {
+        console.log("Display changed:", newDisplay);
+        display = newDisplay;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.setBounds({
+            x: display.bounds.x,
+            y: display.bounds.y,
+            width: display.bounds.width + 1,
+            height: display.bounds.height + 1,
+          });
+        }
+      }
+    } catch (e) {
+      console.error('display check failed', e);
     }
-  }, 10000);
+  }, 500);
 
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setAlwaysOnTop(true, "screen-saver");
