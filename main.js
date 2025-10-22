@@ -27,6 +27,7 @@ let manualIn;
 let resizeMode = false;
 let yomitanShown = false;
 let mainWindow = null;
+let afkHidden = false; // true when AFK timer hid the overlay
 let websocketStates = {
   "ws1": false,
   "ws2": false
@@ -152,8 +153,31 @@ function resetActivityTimer() {
   // Set new timer for 5 minutes
   activityTimer = setTimeout(() => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      console.log("Auto-minimizing due to inactivity");
-      mainWindow.minimize();
+      console.log("AFK timeout reached — hiding overlay text and releasing interactions");
+      // Use dedicated AFK IPC channel so renderer knows this is an automatic hide
+      try {
+        mainWindow.webContents.send('afk-hide', true);
+        afkHidden = true;
+      } catch (e) {
+        console.warn('Failed to send afk-hide to renderer:', e);
+      }
+
+      // Ensure manual hotkey state is cleared so subsequent AFK cycles behave correctly
+      manualHotkeyPressed = false;
+
+      // Make the overlay ignore mouse events so clicks pass through
+      try {
+        mainWindow.setIgnoreMouseEvents(true, { forward: true });
+      } catch (e) {
+        console.warn('Failed to setIgnoreMouseEvents on mainWindow:', e);
+      }
+
+      // Blur window so it doesn't steal focus
+      try {
+        mainWindow.blur();
+      } catch (e) {
+        // ignore
+      }
     }
   }, userSettings.afkTimer * 60 * 1000);
 }
@@ -602,6 +626,15 @@ app.whenReady().then(async () => {
   ipcMain.on("text-recieved", (event, text) => {
     // Reset the activity timer on text received
     resetActivityTimer();
+      // If AFK previously hid the overlay, restore it now
+      if (afkHidden) {
+        try {
+          mainWindow.webContents.send('afk-hide', false);
+        } catch (e) {
+          console.warn('Failed to send afk-hide (restore) to renderer:', e);
+        }
+        afkHidden = false;
+      }
     
     // If window is minimized, restore it
     if (mainWindow.isMinimized()) {
