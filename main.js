@@ -315,7 +315,17 @@ app.whenReady().then(async () => {
 
   globalShortcut.register('Alt+Shift+J', () => {
     if (mainWindow) {
-      if (mainWindow.isMinimized()) {
+      resetActivityTimer();
+      // If AFK previously hid the overlay, restore it now
+      if (afkHidden) {
+        try {
+          mainWindow.webContents.send('afk-hide', false);
+        } catch (e) {
+          console.warn('Failed to send afk-hide (restore) to renderer:', e);
+        }
+        afkHidden = false;
+      }
+      else if (mainWindow.isMinimized()) {
         mainWindow.restore();
         mainWindow.blur();
       }
