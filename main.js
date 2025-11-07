@@ -2,6 +2,7 @@ const { app, BrowserWindow, session, screen, globalShortcut } = require('electro
 const { ipcMain } = require("electron");
 const fs = require("fs");
 const path = require('path');
+const os = require('os');
 const magpie = require('./magpie');
 const bg = require('./background');
 
@@ -40,7 +41,7 @@ if (fs.existsSync(settingsPath)) {
     userSettings = { ...userSettings, ...oldUserSettings }
 
   } catch (error) {
-    console.error("Failed to load settings.json:", e)
+    console.error("Failed to load settings.json:", error)
 
   }
 }
@@ -114,7 +115,10 @@ function registerManualShowHotkey(oldHotkey) {
       lastManualActivity = Date.now();
       // mainWindow.show();
       mainWindow.webContents.send('show-overlay-hotkey', true);
-      mainWindow.setIgnoreMouseEvents(false, { forward: true });
+      
+      if (process.platform === 'win32' || process.platform === 'darwin') {
+        mainWindow.setIgnoreMouseEvents(false, { forward: true });
+      }
 
     if (userSettings.magpieCompatibility || userSettings.focusOnHotkey) {
       mainWindow.show();
@@ -133,7 +137,10 @@ function registerManualShowHotkey(oldHotkey) {
         mainWindow.webContents.send('show-overlay-hotkey', false);
         if (!yomitanShown && !resizeMode) {
           mainWindow.blur();
-          mainWindow.setIgnoreMouseEvents(true, { forward: true });
+          
+          if (process.platform === 'win32' || process.platform === 'darwin') {
+            mainWindow.setIgnoreMouseEvents(true, { forward: true });
+          }
         }
       }, timeToWait);
     }
@@ -167,7 +174,9 @@ function resetActivityTimer() {
 
       // Make the overlay ignore mouse events so clicks pass through
       try {
-        mainWindow.setIgnoreMouseEvents(true, { forward: true });
+        if (process.platform === 'win32' || process.platform === 'darwin') {
+          mainWindow.setIgnoreMouseEvents(true, { forward: true });
+        }
       } catch (e) {
         console.warn('Failed to setIgnoreMouseEvents on mainWindow:', e);
       }
@@ -385,7 +394,7 @@ app.whenReady().then(async () => {
     alwaysOnTop: true,
     resizable: false,
     titleBarStyle: 'hidden',
-    title: "",
+    title: "GSM Overlay",
     fullscreen: false,
     // focusable: false,
     webPreferences: {
@@ -434,14 +443,41 @@ app.whenReady().then(async () => {
 
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setAlwaysOnTop(true, "screen-saver");
+
+  let currentShape = {
+    x: 0,
+    y: 0,
+    width: display.bounds.width,
+    height: display.bounds.height
+  };
+
+  ipcMain.on('update-window-shape', (event, shape) => {
+    if (process.platform === 'linux') {
+      currentShape = shape;
+      // update clickable area on Linux
+      mainWindow.setShape([shape]);
+    }
+  });
+
   ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
     // console.log("set-ignore-mouse-events", ignore, options, resizeMode, yomitanShown);
     if (!resizeMode && !yomitanShown) {
-      mainWindow.setIgnoreMouseEvents(ignore, options)
+      // if ignore is false a button or element on the Overlay was clicked and we do not want to click-through
+      if (process.platform === 'linux') {
+        // On Linux, forwarding mouse click-through is currently unsupported
+        // https://www.electronjs.org/docs/latest/tutorial/custom-window-interactions#click-through-windows
+
+        if(ignore) return; // do nothing (click-through window)
+
+        mainWindow.setShape([currentShape]); // set clickable area
+      } else {
+        mainWindow.setIgnoreMouseEvents(ignore, options);
+      }
+      
+      if (ignore) {
+        // win.blur();
+      }
     }
-    // if (ignore) {
-    //   win.blur();
-    // }
   });
 
   ipcMain.on("hide", (event, state) => {
@@ -465,10 +501,14 @@ app.whenReady().then(async () => {
     
     yomitanShown = state;
     if (state) {
-      mainWindow.setIgnoreMouseEvents(false, { forward: true });
+      if (process.platform === 'win32' || process.platform === 'darwin') {
+        mainWindow.setIgnoreMouseEvents(false, { forward: true });
+      }
       // win.setAlwaysOnTop(true, 'screen-saver');
     } else {
-      mainWindow.setIgnoreMouseEvents(true, { forward: true });
+      if (process.platform === 'win32' || process.platform === 'darwin') {
+        mainWindow.setIgnoreMouseEvents(true, { forward: true });
+      }
       // win.setAlwaysOnTop(true, 'screen-saver');
       if (!manualHotkeyPressed) {
         mainWindow.blur();
@@ -502,7 +542,6 @@ app.whenReady().then(async () => {
   if (isDev) {
     mainWindow.webContents.on('context-menu', () => {
       mainWindow.webContents.openDevTools({ mode: 'detach' });
-
     });
   }
   mainWindow.once('ready-to-show', () => {
@@ -513,7 +552,11 @@ app.whenReady().then(async () => {
     mainWindow.webContents.send("load-settings", userSettings);
     mainWindow.webContents.send("display-info", display);
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
-    mainWindow.setIgnoreMouseEvents(true, { forward: true });
+
+    if (process.platform !== 'linux')  {
+      // Windows and macOS - use setIgnoreMouseEvents
+      mainWindow.setIgnoreMouseEvents(true, { forward: true });
+    }
     
     // Start the activity timer
     resetActivityTimer();
