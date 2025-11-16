@@ -2,8 +2,17 @@ const { ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 
-// ~/AppData/Roaming/GameSentenceMiner/python/python.exe
-let pythonPath = path.join(process.env.APPDATA, 'GameSentenceMiner', 'python', 'python.exe');
+// magpie.js is an init and config file for https://github.com/Blinue/Magpie
+
+// Prepare for Linux support of magpie
+// Default python path. On Windows we ship/expect a portable python in APPDATA.
+// On non-Windows platforms default to system python3 but allow override via GSM_PYTHON env var.
+let pythonPath;
+if (process.platform === 'win32') {
+    pythonPath = path.join(process.env.APPDATA || '', 'GameSentenceMiner', 'python', 'python.exe');
+} else {
+    pythonPath = process.env.GSM_PYTHON || 'python3';
+}
 
 let magpieScalingChangedWindowMessage = -1;
 
@@ -52,7 +61,18 @@ function runPythonScript(args) {
  */
 function getNativeWindowHandleString(mainWindow) {
     const nativeHandle = mainWindow.getNativeWindowHandle();
-    return nativeHandle.readInt32LE(0).toString();
+    // On Windows this is a 32-bit signed int. On Linux (X11) it may be a 32-bit
+    // unsigned Window handle or a 64-bit value on some builds. Read defensively.
+    try {
+        if (nativeHandle.length >= 8 && typeof nativeHandle.readBigUInt64LE === 'function') {
+            return nativeHandle.readBigUInt64LE(0).toString();
+        }
+        // Fallback to unsigned 32-bit to avoid negative numbers
+        return nativeHandle.readUInt32LE(0).toString();
+    } catch (e) {
+        // As a last resort, return the buffer as a hex string
+        return '0x' + nativeHandle.toString('hex');
+    }
 }
 
 async function magpieIsReallyScaling() {
@@ -60,7 +80,12 @@ async function magpieIsReallyScaling() {
     return result.is_scaling;
 }
 
+// init magpie
 async function magpieGetInfo() {
+    if (process.platform === 'linux') {
+        return; // Magpie not (yet) supported on Linux
+    }
+
     return runPythonScript(['get_info']);
 }
 
@@ -79,7 +104,9 @@ async function magpieRegisterScalingChangedMessage(mainWindow) {
         const result = await runPythonScript(['register_message']);
         magpieScalingChangedWindowMessage = result.message_id;
 
-        if (magpieScalingChangedWindowMessage > 0) {
+        // hookWindowMessage is a Windows-only BrowserWindow API. Only call it
+        // if the function exists (i.e., on Windows builds).
+        if (magpieScalingChangedWindowMessage > 0 && typeof mainWindow.hookWindowMessage === 'function') {
             mainWindow.hookWindowMessage(magpieScalingChangedWindowMessage, () => {
                 mainWindow.webContents.send('magpie:scaling-changed');
             });

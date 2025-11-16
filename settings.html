@@ -145,6 +145,11 @@
       font-weight: bold;
     }
 
+    input[type="checkbox"]:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .status-indicator {
       display: inline-block;
       width: 10px;
@@ -352,8 +357,43 @@
   <script>
     const { ipcRenderer } = require("electron");
 
+    // Settings that are not supported on Linux
+    const disabledOnLinuxSettings = ['magpieCompatibility'];
+
+    // Immediately disable listed settings when running on Linux so UI is non-interactive
+    try {
+      if (typeof process !== 'undefined' && process.platform === 'linux') {
+        disabledOnLinuxSettings.forEach((settingId) => {
+          const el = document.getElementById(settingId);
+          if (el) {
+            el.disabled = true;
+            el.title = 'This setting is disabled on Linux.';
+          }
+        });
+      }
+    } catch (e) {
+      // ignore if process is not available
+    }
+
     // Unified settings change handler
-    function handleSettingChange(settingKey, value) {
+    // element is optional - if provided we'll check element.disabled there
+    function handleSettingChange(settingKey, value, element) {
+      // If the control element is disabled, ignore the change
+      try {
+        if (element && element.disabled) return;
+      } catch (e) {
+        // ignore
+      }
+
+      // If this setting is configured to be disabled on Linux, ignore attempts to change it
+      try {
+        if (typeof process !== 'undefined' && process.platform === 'linux' && disabledOnLinuxSettings.includes(settingKey)) {
+          return;
+        }
+      } catch (e) {
+        // In case process is not available, silently continue
+      }
+
       console.log(`Setting changed: ${settingKey} = ${value}`);
       ipcRenderer.send("setting-changed", { key: settingKey, value: value });
     }
@@ -376,7 +416,7 @@
     });
 
     document.getElementById("magpieCompatibility").addEventListener("change", (event) => {
-      handleSettingChange("magpieCompatibility", event.target.checked);
+      handleSettingChange("magpieCompatibility", event.target.checked, event.target);
     });
 
     document.getElementById("manualMode").addEventListener("change", (event) => {
